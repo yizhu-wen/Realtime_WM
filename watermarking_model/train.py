@@ -91,7 +91,7 @@ def resolve_wandb_key():
     )
 
 
-def main(configs):
+def main(configs, restore_ckpt=None):
     logging.info("main function")
     process_config, model_config, train_config = configs
 
@@ -223,6 +223,36 @@ def main(configs):
         gamma=train_config["optimize"]["gamma"],
     )
 
+    # ---------------- resume
+    start_epoch = 1
+    if restore_ckpt:
+        ckpt = torch.load(restore_ckpt, map_location=device, weights_only=False)
+        encoder.load_state_dict(ckpt["encoder"])
+        decoder.load_state_dict(ckpt["decoder"])
+        en_de_op.load_state_dict(ckpt["en_de_op"])
+        if train_config["adv"]:
+            if "discriminator" in ckpt and "d_op" in ckpt:
+                discriminator.load_state_dict(ckpt["discriminator"])
+                d_op.load_state_dict(ckpt["d_op"])
+            else:
+                raise SystemExit(
+                    f"{restore_ckpt} has no discriminator state but adv is True.\n"
+                    "Resuming would pit a trained encoder against a fresh discriminator.\n"
+                    "Set adv: false, or resume from a checkpoint that has one."
+                )
+        start_epoch = ckpt.get("epoch", 0) + 1
+        total_epochs = train_config["iter"]["epoch"]
+        if start_epoch > total_epochs:
+            raise SystemExit(
+                f"checkpoint is at epoch {start_epoch - 1} but iter.epoch is "
+                f"{total_epochs}; raise iter.epoch to continue training."
+            )
+        logging.info(
+            "{}\tResuming from {} at epoch {}\t{}".format(
+                logging_mark, restore_ckpt, start_epoch, logging_mark
+            )
+        )
+
     # ---------------- Loss
     loss = Loss_identity()
 
@@ -244,10 +274,16 @@ def main(configs):
     lambda_b = train_config["optimize"]["lambda_b"]
     hop_length = process_config["mel"]["hop_length"]
     offset_samples = 40480  # ((204+50)-1)*160
-    global_step = 0
     train_len = len(train_audios_loader)
+    global_step = (start_epoch - 1) * train_len
+    # StepLR is advanced once per epoch by my_step; fast-forward it so a
+    # resumed run sees the same learning rate it would have without the break.
+    for _ in range(start_epoch - 1):
+        lr_sched.step()
+        if train_config["adv"]:
+            lr_sched_d.step()
 
-    for ep in range(1, epoch_num + 1):
+    for ep in range(start_epoch, epoch_num + 1):
         encoder.train()
         decoder.train()
         if train_config["adv"]:
@@ -670,7 +706,12 @@ def main(configs):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--restore_step", type=int, default=0)
+    parser.add_argument(
+        "--restore_ckpt",
+        type=str,
+        default=None,
+        help="path to a .pth.tar to resume from; training continues at its epoch+1",
+    )
     parser.add_argument(
         "-p",
         "--process_config",
@@ -700,4 +741,4 @@ if __name__ == "__main__":
     train_config = yaml.load(open(args.train_config, "r"), Loader=yaml.FullLoader)
     configs = (process_config, model_config, train_config)
 
-    main(configs)
+    main(configs, restore_ckpt=args.restore_ckpt)
