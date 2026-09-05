@@ -84,48 +84,42 @@ omitted the discriminator so adversarial runs could not resume; plus an
 operator-precedence error in the encoder chunk guard and an `UnboundLocalError`
 if `smooth_chunks`/`dilate_chunks` were set non-null.
 
-## Last run: stopped by user after 5 epochs (2026-09-05)
+## Active run (started 2026-09-05 03:04)
 
-Full-dataset 50-epoch run, killed at 3h31m by user request. Not a crash.
+Fresh 50-epoch run on the full dataset, with the VAD/mask/RIR changes in
+`e86ae20`. Launched detached (`setsid`) so it survives this session.
 
-- wandb: https://wandb.ai/yizhuwenus-university-of-hawaii-system/real-time-voice-watermark/runs/wgr5miqz
-- log: `watermarking_model/results/log/fulltrain_20260904_221352.log` (gitignored)
-- checkpoint kept: `results/ckpt/pth/none-conv2_ep_5_2026-09-05_01_38_25.pth.tar`
-  (encoder, decoder, discriminator, both optimizers; resumable)
+- wandb: https://wandb.ai/yizhuwenus-university-of-hawaii-system/real-time-voice-watermark/runs/b6hzmqft
+- run name: `novad_50ep_lm10-lb1_delay0.5_future0.5_causalRIR`
+- log: `watermarking_model/results/log/novad_full_20260905_030352.log` (gitignored)
+- main trainer pid at launch: 3857065
 - settings: 28539 train files, batch 8, `lambda_m: 10`, `lambda_b: 1`,
   delay/future 0.5s, `adv: True`, `distortion: true`
+- ETA ~38 h
 
-### What it showed
+Finding the pid: the trainer is the process orphaned by `setsid` (ppid 1);
+`pgrep -f "python train.py"` also matches its 22 DataLoader workers, so
+grabbing the first match gets a worker and looks like the run died.
 
-The message decoder learns very well at full scale, and far faster than on the
-400-file subset — but SNR degrades monotonically. Validation:
+```bash
+for p in $(pgrep -f "python train.py -p config"); do
+  [ "$(awk '{print $4}' /proc/$p/stat)" = 1 ] && echo $p; done
+```
 
-| epoch | val bit acc | val SNR |
-| --- | --- | --- |
-| 1 | 0.815 / 0.868 | +0.59 dB |
-| 2 | 0.877 / 0.899 | −1.51 dB |
-| 3 | 0.890 / 0.925 | −2.12 dB |
-| 4 | 0.921 / 0.955 | −3.19 dB |
-| 5 | 0.929 / 0.969 | −3.46 dB |
+**Killing it needs the process group.** `persistent_workers=True` with
+`num_workers=20` means killing the parent leaves ~40 orphaned workers holding
+~53 GB of VRAM. Kill the group, then sweep by command line, then confirm the
+GPU actually dropped to ~2 MiB.
 
-Train acc hit 0.985 / 0.994 by epoch 5, and individual steps reached 1.000.
+### Previous run (superseded)
 
-So accuracy is not the problem — imperceptibility is. The +2.3 dB reading at
-step 1000 of epoch 1 was a transient, not a trend; SNR fell steadily after it.
-The encoder is buying bit accuracy by making the watermark louder, and nothing
-bounds that: `TFLoudnessRatio` is unbounded below and the waveform MSE term is
-orders of magnitude smaller than the message term.
-
-Corroborating: both discriminator losses collapsed to ~1e-3 by epoch 5, i.e.
-the discriminator separates watermarked from cover audio trivially — consistent
-with a clearly audible watermark. With `lambda_a: 0.01` the adversarial term is
-far too weak to push back.
-
-**Conclusion: the loss weights do need retuning, at full scale too.** Raise
-`lambda_b` (and/or `lambda_a`) relative to `lambda_m: 10`, or add an explicit
-SNR floor / watermark-amplitude penalty. Five epochs is ~3.5 h, which is a
-usable calibration loop — accuracy is already >0.92 by then, so the question is
-purely how much SNR can be bought back.
+50-epoch run at `wgr5miqz`, killed by the user after 5 epochs (3h31m). It
+showed message decoding works well at full scale (val acc 0.929/0.969 by epoch
+5) while val SNR fell monotonically +0.59 -> -3.46 dB, and both discriminator
+losses collapsed to ~1e-3. Its epoch-5 checkpoint is at
+`results/ckpt/pth/none-conv2_ep_5_2026-09-05_01_38_25.pth.tar`, but it predates
+`e86ae20` and was trained with VAD gating that no longer exists, so it is not a
+valid warm start for the current architecture.
 
 ## Open items
 
