@@ -161,7 +161,6 @@ def main(configs):
                 "epochs": train_config["iter"]["epoch"],
                 "save_circle": train_config["iter"]["save_circle"],
                 "show_circle": train_config["iter"]["show_circle"],
-                "val_circle": train_config["iter"]["val_circle"],
             },
         )
         test_loss_summary_table = wandb.Table(
@@ -175,20 +174,6 @@ def main(configs):
                 "test_avg_snr",
                 "test_d_loss_on_encoded",
                 "test_d_loss_on_cover",
-            ]
-        )
-        val_audio_table = wandb.Table(
-            columns=[
-                "Epoch",
-                "Original Audio",
-                "Watermarked Audio",
-                "Watermark Audio",
-                "Original Amplitude Spectrogram",
-                "Original Phase Spectrogram",
-                "Watermarked Amplitude Spectrogram",
-                "Watermarked Phase Spectrogram",
-                "Watermark Amplitude Spectrogram",
-                "Watermark Phase Spectrogram",
             ]
         )
         test_audio_table = wandb.Table(
@@ -224,9 +209,6 @@ def main(configs):
             step_size=train_config["optimize"]["step_size"],
             gamma=train_config["optimize"]["gamma"],
         )
-    # shared parameters
-    if model_config["structure"]["share"]:
-        decoder.wav_encoder = encoder.wav_encoder
     # ---------------- optimizer
     en_de_op = Adam(
         params=chain(decoder.parameters(), encoder.parameters()),
@@ -260,8 +242,6 @@ def main(configs):
     lambda_e = train_config["optimize"]["lambda_e"]
     lambda_m = train_config["optimize"]["lambda_m"]
     lambda_b = train_config["optimize"]["lambda_b"]
-    num_save_img = train_config["iter"]["num_save_img"]
-    sample_rate = process_config["audio"]["or_sample_rate"]
     hop_length = process_config["mel"]["hop_length"]
     offset_samples = 40480  # ((204+50)-1)*160
     global_step = 0
@@ -440,10 +420,7 @@ def main(configs):
 
         # if ep % save_circle == 0 or ep == 1 or ep == 2:
         if ep % save_circle == 0:
-            if not model_config["structure"]["ab"]:
-                path = os.path.join(train_config["path"]["ckpt"], "pth")
-            else:
-                path = os.path.join(train_config["path"]["ckpt"], "pth_ab")
+            path = os.path.join(train_config["path"]["ckpt"], "pth")
             save_op(
                 path,
                 ep,

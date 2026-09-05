@@ -42,7 +42,6 @@ def collate_fn(batch):
 
 class WavDataset(Dataset):
     def __init__(self, process_config, train_config, flag="train"):
-        self.dataset_name = train_config["dataset"]
         raw_dataset_path = train_config["path"]["raw_path"]
         self.flag = flag
         self.dataset_path = os.path.join(raw_dataset_path, flag)
@@ -56,7 +55,6 @@ class WavDataset(Dataset):
                 self.original_sample_rate, self.sample_rate
             )
 
-        self.max_wav_value = process_config["audio"]["max_wav_value"]
         self.win_len = process_config["audio"]["win_len"]
         self.max_len = process_config["audio"]["max_len"]
         self.data_percentage = process_config["audio"]["data_percentage"]

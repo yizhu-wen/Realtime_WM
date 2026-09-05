@@ -1,72 +1,46 @@
-dataset: "librispeech"
-
-adv: True
+adv: True            # enable the discriminator
 
 path:
   raw_path: "/data/yizwen/LibriSpeech_wav"
-  wm_speech: "./results/wm_speech"
   ckpt: "results/ckpt/"
   log_path: "results/log/"
 
 watermark:
-  length: 10
-  delay_amt_second: 0.5
-  future_amt_second: 0.5
+  length: 10                # message length in bits
+  delay_amt_second: 0.5     # hop between successive watermark chunks
+  future_amt_second: 0.5    # lookahead the encoder is allowed
 
 optimize:
   lr: 0.0001
-  lambda_e: 1.
-  lambda_m: 10.
-  # lambda_m: 0.01
-  lambda_no_m: 0.01
-  lambda_a: 0.01
-  lambda_b: 1.
-  lambda_c: 1.
-  batch_size: 8  # remote batch_size=8, local batch_size=2
-  step_size: 5000 # large value means do not decay
+  # Loss weights. See the note in the README: with lambda_m applied as
+  # configured, the perceptual terms need retuning against it.
+  lambda_e: 1.       # waveform MSE
+  lambda_m: 10.      # message MSE
+  lambda_b: 1.       # TF-loudness
+  lambda_a: 0.01     # adversarial
+  batch_size: 8      # remote batch_size=8, local batch_size=2
+  step_size: 5000    # large value means do not decay
   gamma: 0.98
   betas: [0.9, 0.98]
   eps: 0.000000001
   weight_decay: 0.0
-  grad_clip_thresh: 1.0
-  grad_acc_step: 1
-  up_step: 4000
-  anneal_steps: [300000, 400000, 500000]
-  anneal_rate: 0.3
-  lr_disc: 0.00002
-  alpha: 10
-  train_size: 31000
-  smooth_chunks: null
-  dilate_chunks: null
+  # VAD mask shaping
+  smooth_chunks: null       # null => derive from target_smooth_ms
+  dilate_chunks: null       # null => derive from target_dilate_ms
   target_smooth_ms: 40
   target_dilate_ms: 15
-  floor_eps: 0.2
-  tau: 0.15
-  distortion: true
+  tau: 0.15                 # softness of the VAD threshold
+  distortion: true          # RIR + noise + bandpass before decoding
 
 iter:
   epoch: 60
-  save_circle: 5
-  show_circle: 1000
-  val_circle: 1000
-  data_divider: 1
-  test_record_num: 100
-  num_save_img: 10
-
-select_aug_mode:
-  "use_eval" # other are 'all' and 'use_eval_acc', used to sample augmentations, `fixed` uses the prob from aug_weights, `all` uses all agmentations every step
-  # `use_eval_acc` changes the weights based on the accuracies at evaluation time
-
-n_max_aug: null
-
-aug:
-  cutoff_freq_low: 300
-  cutoff_freq_high: 3400
+  save_circle: 5      # checkpoint every N epochs
+  show_circle: 1000   # log every N steps
+  data_divider: 1     # train on 1/N of the data
 
 wandb:
-  enabled: true  # Set to true to enable wandb logging
+  enabled: true
   project: "real-time-voice-watermark"
   name: "FullSet"
   # API key is read from the WANDB_API_KEY environment variable.
   # Do not commit a key here.
-

@@ -97,12 +97,10 @@ class Encoder(nn.Module):
         self.dilate_chunks = train_config["optimize"]["dilate_chunks"]
         self.target_smooth_ms = train_config["optimize"]["target_smooth_ms"]
         self.target_dilate_ms = train_config["optimize"]["target_dilate_ms"]
-        self.floor_eps = train_config["optimize"]["floor_eps"]
         self.tau = train_config["optimize"]["tau"]
         self.vad = load_silero_vad()
         self.vad_threshold = 0.50
 
-        self.vocoder_step = model_config["structure"]["vocoder_step"]
         # MLP for the input wm
         # self.msg_linear_in = FCBlock(msg_length, self.win_dim, activation=LeakyReLU(inplace=True))
         self.msg_linear_in = FCBlock(
@@ -324,8 +322,6 @@ class Encoder(nn.Module):
                 0.0, 1.0
             )
 
-            # # 6) Floor ε so mask ∈ [ε, 1]
-            # soft_sample_masks = (self.floor_eps + (1.0 - self.floor_eps) * m_up).clamp_(0.0, 1.0)  # [B, T]
 
             masked_y = y * soft_sample_masks
             # # Threshold the probabilities to obtain a binary mask per chunk.
@@ -351,14 +347,12 @@ class Encoder(nn.Module):
 class Decoder(nn.Module):
     def __init__(self, process_config, model_config, train_config, msg_length):
         super(Decoder, self).__init__()
-        self.robust = model_config["robust"]
         self.original_sample_rate = process_config["audio"]["or_sample_rate"]
         self.mel_transform = TacotronSTFT(
             filter_length=process_config["mel"]["n_fft"],
             hop_length=process_config["mel"]["hop_length"],
             win_length=process_config["mel"]["win_length"],
         )
-        self.vocoder_step = model_config["structure"]["vocoder_step"]
         self.win_dim = int((process_config["mel"]["n_fft"] / 2) + 1)
         self.hop_length = process_config["mel"]["hop_length"]
         self.distortion = train_config["optimize"]["distortion"]

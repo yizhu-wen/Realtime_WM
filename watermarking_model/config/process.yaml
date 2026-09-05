@@ -2,7 +2,6 @@ audio:
   or_sample_rate: 16000
   sample_rate: 16000
 #  sample_rate: 22050
-  max_wav_value: 32768.0
   win_len: 256
   max_len: 176000
   data_percentage: 1.0
