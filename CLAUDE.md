@@ -84,43 +84,55 @@ omitted the discriminator so adversarial runs could not resume; plus an
 operator-precedence error in the encoder chunk guard and an `UnboundLocalError`
 if `smooth_chunks`/`dilate_chunks` were set non-null.
 
-## Active run (started 2026-09-04 22:13)
+## Last run: stopped by user after 5 epochs (2026-09-05)
 
-Full-dataset 50-epoch run, launched detached with `setsid` so it survives the
-session that started it.
+Full-dataset 50-epoch run, killed at 3h31m by user request. Not a crash.
 
 - wandb: https://wandb.ai/yizhuwenus-university-of-hawaii-system/real-time-voice-watermark/runs/wgr5miqz
-- run name: `full_50ep_lm10-lb1_delay0.5_future0.5`
 - log: `watermarking_model/results/log/fulltrain_20260904_221352.log` (gitignored)
-- pid at launch: 3817977 (also in `/tmp/claude_fulltrain_pid`)
-- settings: all 28539 train files, batch 8, `lambda_m: 10`, `lambda_b: 1`,
-  `delay/future 0.5s`, `adv: True`, `distortion: true`
-- ETA ~38 h (measured 0.700 s/step; 3567 train + 337 val steps/epoch)
+- checkpoint kept: `results/ckpt/pth/none-conv2_ep_5_2026-09-05_01_38_25.pth.tar`
+  (encoder, decoder, discriminator, both optimizers; resumable)
+- settings: 28539 train files, batch 8, `lambda_m: 10`, `lambda_b: 1`,
+  delay/future 0.5s, `adv: True`, `distortion: true`
 
-Checkpoints every 5 epochs to `watermarking_model/results/ckpt/pth/`. The
-held-out test pass runs automatically after epoch 50 and prints a `Test:` line.
+### What it showed
 
-Check on it with:
+The message decoder learns very well at full scale, and far faster than on the
+400-file subset — but SNR degrades monotonically. Validation:
 
-```bash
-pgrep -af "python train.py"
-tail -f watermarking_model/results/log/fulltrain_20260904_221352.log
-grep -E "^epoch:" watermarking_model/results/log/fulltrain_*.log | tail
-```
+| epoch | val bit acc | val SNR |
+| --- | --- | --- |
+| 1 | 0.815 / 0.868 | +0.59 dB |
+| 2 | 0.877 / 0.899 | −1.51 dB |
+| 3 | 0.890 / 0.925 | −2.12 dB |
+| 4 | 0.921 / 0.955 | −3.19 dB |
+| 5 | 0.929 / 0.969 | −3.46 dB |
 
-Early signal: at step 1000 of epoch 1, train acc was already 0.775 / 0.913 at
-SNR +2.3 dB — far better than the 400-file run, which needed 20 epochs to reach
-that and at −2 dB. The loss balance may be fine at full scale after all; judge
-from this run before retuning (open item 1).
+Train acc hit 0.985 / 0.994 by epoch 5, and individual steps reached 1.000.
+
+So accuracy is not the problem — imperceptibility is. The +2.3 dB reading at
+step 1000 of epoch 1 was a transient, not a trend; SNR fell steadily after it.
+The encoder is buying bit accuracy by making the watermark louder, and nothing
+bounds that: `TFLoudnessRatio` is unbounded below and the waveform MSE term is
+orders of magnitude smaller than the message term.
+
+Corroborating: both discriminator losses collapsed to ~1e-3 by epoch 5, i.e.
+the discriminator separates watermarked from cover audio trivially — consistent
+with a clearly audible watermark. With `lambda_a: 0.01` the adversarial term is
+far too weak to push back.
+
+**Conclusion: the loss weights do need retuning, at full scale too.** Raise
+`lambda_b` (and/or `lambda_a`) relative to `lambda_m: 10`, or add an explicit
+SNR floor / watermark-amplitude penalty. Five epochs is ~3.5 h, which is a
+usable calibration loop — accuracy is already >0.92 by then, so the question is
+purely how much SNR can be bought back.
 
 ## Open items
 
-1. **Retune the loss weights.** Test SNR of −2 dB means the watermark is
-   audible. With `lambda_m` finally applied at 10.0 the perceptual terms lose
-   badly. The bug was masking a balance that was never actually tuned, so
-   `lambda_m` / `lambda_b` need calibrating — do a short run before committing
-   to 50 epochs. That −2 dB is from 400 files; the balance may land differently
-   at 28k.
+1. **Retune the loss weights.** Confirmed necessary at full scale by the run
+   above: val SNR fell from +0.6 dB to −3.5 dB over 5 epochs while accuracy
+   climbed to 0.93/0.97. The message term dominates and nothing bounds the
+   watermark's amplitude. Use ~5-epoch runs (~3.5 h) as the calibration loop.
 
 2. **Rotate the wandb API key.** It was committed in `config/train.yaml` and is
    still in git history (removing it from the working tree does not retract it).
