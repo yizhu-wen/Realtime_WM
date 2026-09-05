@@ -1,16 +1,15 @@
-audiomentations==0.28.0
-fire==0.5.0
-julius==0.2.7
-kornia==0.6.9
+# Verified against the `timbrewm` conda env (Python 3.11, CUDA 12.8).
+# Install torch/torchaudio first, matched to your CUDA version:
+#   pip install torch==2.7.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu128
+torch==2.7.1
+torchaudio==2.7.1
+
+julius==0.2.8
 librosa==0.9.2
-numpy==1.24.2
-pydub==0.25.1
-pypesq==1.2.4
-PyYAML==6.0
-Resemblyzer==0.1.1.dev0
-rich==13.3.2
-scikit_learn==1.2.1
-scipy==1.10.1
-SoundFile==0.10.3.post1
-torch==1.13.0+cu116
-torchaudio==0.13.0+cu116
+numpy==1.26.4
+PyYAML==6.0.3
+rich==15.0.0
+scipy==1.11.4
+silero-vad==6.2.1
+soundfile==0.14.0
+wandb==0.29.0

@@ -1,66 +1,97 @@
-# Timbre watermarking model
-This is the complete code of the watermarking model part. Visit our [website](https://timbrewatermarking.github.io/samples.html) for audio samples.
+# Real-time speech watermarking
 
+Streaming-capable neural speech watermarking. An encoder embeds an `n`-bit message
+into speech using only a short lookahead, and a decoder recovers it from the
+watermarked audio after transmission-style distortion.
 
-# How to use
-## Dependencies
+Built on the watermarking model from
+[TimbreWatermarking](https://github.com/TimbreWatermarking/TimbreWatermarking) (NDSS 2024).
 
-You can setup the conda environment and install the Python dependencies with
+## Layout
+
 ```
-git clone https://github.com/TimbreWatermarking/TimbreWatermarking.git
-cd TimbreWatermarking/watermarking_model
-conda create -n timbrewatermark python=3.8.13
-source activate timbrewatermark
+watermarking_model/
+├── train.py                    # the trainer (only entry point)
+├── config/
+│   ├── process.yaml            # audio + STFT settings
+│   ├── model.yaml              # encoder/decoder architecture
+│   └── train.yaml              # paths, loss weights, schedule, wandb
+├── model/
+│   ├── conv2_mel_modules.py    # Encoder / Decoder / Discriminator
+│   ├── blocks.py               # conv + FC building blocks
+│   └── loss.py                 # MSE + TF-loudness losses
+├── distortions/frequency.py    # differentiable STFT / iSTFT
+├── dataset/
+│   ├── data.py                 # WavDataset + collate_fn
+│   ├── sh.sh                   # download LibriSpeech
+│   └── move_flac_to_wav.py     # flac -> wav, into the layout below
+└── utils/                      # optimizer step + checkpoint saving
+```
+
+## Setup
+
+```bash
+conda create -n timbrewm python=3.11
+conda activate timbrewm
+# install torch/torchaudio matched to your CUDA version first, then:
 pip install -r requirements.txt
 ```
-You may need to manually install the appropriate version of pytorch following the rules from [pytorch](https://pytorch.org/get-started/previous-versions).
 
 ## Dataset
 
-You need to download the dataset used in the paper and extract it to an appropriate location.
-You can use the script provided here to automatically download and process the [LibriSpeech dataset](https://www.openslr.org/12):
+```bash
+cd dataset && sh ./sh.sh
 ```
-cd dataset 
-sh ./sh.sh
-```
-For the [LJSpeech dataset](https://data.keithito.com/data/speech/LJSpeech-1.1.tar.bz2), you can download it manually. 
 
+This downloads LibriSpeech and converts it to the layout the trainer expects.
+Point `path.raw_path` in `config/train.yaml` at the resulting directory:
 
-
-## Inference
-
-Modify 'raw_path' in `config/train.yaml` to point to your LibriSpeech path. The file structure is as follows, and the complete file structure can be found in `dataset/LibriSpeech_wav_structure.txt`.
 ```
 LibriSpeech_wav
-├── test
-│   ├── 1089-134686-0000.wav
-│   ├── 1089-134686-0001.wav
-│   ├── 1089-134686-0002.wav
-│   ├── 1089-134686-0003.wav
-│   ├── 1089-134686-0004.wav
-│   ├── 1089-134686-0005.wav
-│   └── ......
-├── train
-│   ├── 103-1240-0000.wav
-│   ├── 103-1240-0001.wav
-│   ├── 103-1240-0002.wav
-│   ├── 103-1240-0003.wav
-│   ├── 103-1240-0004.wav
-│   ├── 103-1240-0005.wav
-│   └── ......
-└── val
-    ├── 1272-128104-0000.wav
-    ├── 1272-128104-0001.wav
-    ├── 1272-128104-0002.wav
-    ├── 1272-128104-0003.wav
-    ├── 1272-128104-0004.wav
-    ├── 1272-128104-0005.wav
-    └── ......
+├── train/    103-1240-0000.wav, ...
+├── val/      1272-128104-0000.wav, ...
+└── test/     1089-134686-0000.wav, ...
 ```
+
+Clips shorter than `2s + delay_amt_second + future_amt_second` are filtered out
+automatically at dataset construction.
 
 ## Training
 
-You can use the following command to retrain the watermarking model:
-```
+```bash
 python train.py -p config/process.yaml -m config/model.yaml -t config/train.yaml
 ```
+
+Each epoch logs train, then validation metrics (`wav_loss`, `msg_loss`,
+`tfloudness_loss`, bit accuracy for both decoder heads, SNR, and the two
+discriminator losses); a held-out test pass runs once at the end.
+Checkpoints land in `path.ckpt` every `iter.save_circle` epochs and contain the
+encoder, decoder, discriminator, and both optimizer states.
+
+### Knobs worth knowing
+
+| Config key | Meaning |
+| --- | --- |
+| `watermark.length` | message length in bits |
+| `watermark.delay_amt_second` | hop between successive watermark chunks |
+| `watermark.future_amt_second` | lookahead the encoder is allowed |
+| `optimize.lambda_e / lambda_m / lambda_b / lambda_a` | weights for waveform, message, loudness, adversarial loss |
+| `optimize.distortion` | apply RIR + noise + bandpass before decoding |
+| `adv` | enable the discriminator |
+| `iter.data_divider` | train on `1/N` of the data (quick runs) |
+
+### wandb
+
+`wandb.enabled: true` in `config/train.yaml` requires `WANDB_API_KEY` in the
+environment. Set it once:
+
+```bash
+echo 'export WANDB_API_KEY=<your key>' >> ~/.bashrc && source ~/.bashrc
+```
+
+For batch jobs, export it in the submission script instead — a compute node may
+not read your shell profile. The key is never read from the config file; do not
+commit one there. If the variable is missing the run stops immediately with
+instructions, rather than failing partway in.
+
+To train without logging, set `wandb.enabled: false`.
