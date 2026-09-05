@@ -84,6 +84,35 @@ omitted the discriminator so adversarial runs could not resume; plus an
 operator-precedence error in the encoder chunk guard and an `UnboundLocalError`
 if `smooth_chunks`/`dilate_chunks` were set non-null.
 
+## Active run (started 2026-09-04 22:13)
+
+Full-dataset 50-epoch run, launched detached with `setsid` so it survives the
+session that started it.
+
+- wandb: https://wandb.ai/yizhuwenus-university-of-hawaii-system/real-time-voice-watermark/runs/wgr5miqz
+- run name: `full_50ep_lm10-lb1_delay0.5_future0.5`
+- log: `watermarking_model/results/log/fulltrain_20260904_221352.log` (gitignored)
+- pid at launch: 3817977 (also in `/tmp/claude_fulltrain_pid`)
+- settings: all 28539 train files, batch 8, `lambda_m: 10`, `lambda_b: 1`,
+  `delay/future 0.5s`, `adv: True`, `distortion: true`
+- ETA ~38 h (measured 0.700 s/step; 3567 train + 337 val steps/epoch)
+
+Checkpoints every 5 epochs to `watermarking_model/results/ckpt/pth/`. The
+held-out test pass runs automatically after epoch 50 and prints a `Test:` line.
+
+Check on it with:
+
+```bash
+pgrep -af "python train.py"
+tail -f watermarking_model/results/log/fulltrain_20260904_221352.log
+grep -E "^epoch:" watermarking_model/results/log/fulltrain_*.log | tail
+```
+
+Early signal: at step 1000 of epoch 1, train acc was already 0.775 / 0.913 at
+SNR +2.3 dB — far better than the 400-file run, which needed 20 epochs to reach
+that and at −2 dB. The loss balance may be fine at full scale after all; judge
+from this run before retuning (open item 1).
+
 ## Open items
 
 1. **Retune the loss weights.** Test SNR of −2 dB means the watermark is
