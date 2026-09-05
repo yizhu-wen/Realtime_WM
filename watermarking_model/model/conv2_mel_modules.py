@@ -153,7 +153,7 @@ class Encoder(nn.Module):
         )
         return actual_watermark, zeros_right
 
-    def forward(self, x, msg, global_step, lengths=None):
+    def forward(self, x, msg, global_step):
         self.stft.num_samples = x.shape[-1]
         _, _, stft_result = self.stft.transform(x)
         # Evaluate how many chunks we can process
@@ -227,26 +227,8 @@ class Encoder(nn.Module):
                 stft_result, watermark, self.voice_prefilling
             )
             del list_of_watermarks
-            # Suppress the watermark past the end of each utterance. This used
-            # to be `stft_result != 0`, an implicit float-equality test that
-            # happened to be true only over collate_fn's zero padding. It is
-            # replaced by the padding lengths, which are known exactly and do
-            # not depend on the signal content. Without any such mask the
-            # encoder can hide the message in the zero padding -- the decoder
-            # averages over the whole time axis, so that is a training
-            # shortcut with no counterpart at inference.
-            if lengths is not None:
-                valid_frames = torch.div(
-                    lengths, self.hop_length, rounding_mode="floor"
-                ).to(all_watermark_stft.device)
-                frame_idx = torch.arange(
-                    all_watermark_stft.shape[3], device=all_watermark_stft.device
-                )
-                keep = (frame_idx[None, :] < valid_frames[:, None]).to(
-                    all_watermark_stft.dtype
-                )
-                all_watermark_stft = all_watermark_stft * keep[:, None, None, :]
-            all_watermark_stft = all_watermark_stft + 0.0000001
+            mask = stft_result != 0
+            all_watermark_stft = all_watermark_stft * mask + 0.0000001
 
             # Recompute magnitude & phase
             real_part = all_watermark_stft[:, 0, :, :]
@@ -323,10 +305,7 @@ class Encoder(nn.Module):
             )  # [B, num_frames, frame_size]
             rms = rms.pow(2).mean(dim=-1).sqrt()  # [B, num_frames]
             # Normalize RMS into [0,1] (prevent divide-by-zero)
-            # Causal running maximum. The global max over the utterance made
-            # the mask at every t depend on future audio (measured: a change
-            # after 5 s altered the mask at sample 0).
-            rms = rms / (rms.cummax(dim=1).values + 1e-8)
+            rms = rms / (rms.max(dim=1, keepdim=True).values + 1e-8)
 
             # Upsample RMS back to sample level and map to floor in [floor_min,floor_max].
             dynamic_floor = F.interpolate(

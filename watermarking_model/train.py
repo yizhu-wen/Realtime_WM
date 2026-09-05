@@ -268,9 +268,8 @@ def main(configs):
             b = sample["matrix"].shape[0]
             # ---------------- build watermark
             wav_matrix = sample["matrix"].to(device)
-            lengths = (wav_matrix.shape[-1] - sample["pad_num"]).to(device)
             msg = generate_random_msg(wav_matrix.size(0), msg_length, device)
-            watermark, zeros_right = encoder(wav_matrix, msg, global_step, lengths=lengths)
+            watermark, zeros_right = encoder(wav_matrix, msg, global_step)
             waveform_length = (zeros_right - 1) * hop_length if zeros_right > 1 else 0
             end = None if waveform_length == 0 else -waveform_length
             y_wm = wav_matrix + watermark
@@ -451,9 +450,8 @@ def main(configs):
                 b = sample["matrix"].shape[0]
                 # ---------------- build watermark
                 wav_matrix = sample["matrix"].to(device)
-                lengths = (wav_matrix.shape[-1] - sample["pad_num"]).to(device)
                 msg = generate_random_msg(wav_matrix.size(0), msg_length, device)
-                watermark, zeros_right = encoder(wav_matrix, msg, global_step, lengths=lengths)
+                watermark, zeros_right = encoder(wav_matrix, msg, global_step)
                 waveform_length = (
                     (zeros_right - 1) * hop_length if zeros_right > 1 else 0
                 )
@@ -563,9 +561,8 @@ def main(configs):
             b = sample["matrix"].shape[0]
             # ---------------- build watermark
             wav_matrix = sample["matrix"].to(device)
-            lengths = (wav_matrix.shape[-1] - sample["pad_num"]).to(device)
             msg = generate_random_msg(wav_matrix.size(0), msg_length, device)
-            watermark, zeros_right = encoder(wav_matrix, msg, global_step, lengths=lengths)
+            watermark, zeros_right = encoder(wav_matrix, msg, global_step)
             waveform_length = (zeros_right - 1) * hop_length if zeros_right > 1 else 0
             end = None if waveform_length == 0 else -waveform_length
             y_wm = wav_matrix + watermark
