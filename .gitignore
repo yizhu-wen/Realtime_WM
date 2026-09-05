@@ -320,3 +320,9 @@ __pycache__/
 *.py[cod]
 wandb/
 results/log/
+
+### Secrets — never commit
+wandb_api.txt
+*api_key*
+*_secret*
+.env
