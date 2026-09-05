@@ -19,18 +19,18 @@ from torchaudio.functional import (
 )
 
 import torchaudio
-from typing import Dict, Tuple
+from typing import Dict
 
 # Optional: set up a small constant
 EPS = 1e-9
 
-_PHONE_CACHE: Dict[int, Tuple[torch.Tensor, torch.Tensor]] = {}  # sr -> (rir, noise)
+_RIR_CACHE: Dict[int, torch.Tensor] = {}  # sr -> rir
 
 
-def _get_phone_assets(target_sr: int) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Download/load demo RIR/noise and resample to target_sr. Returns mono [1, T] tensors."""
-    if target_sr in _PHONE_CACHE:
-        return _PHONE_CACHE[target_sr]
+def _get_rir(target_sr: int) -> torch.Tensor:
+    """Download/load the demo room impulse response, resampled to target_sr. Returns [1, T]."""
+    if target_sr in _RIR_CACHE:
+        return _RIR_CACHE[target_sr]
 
     try:
         from torchaudio.utils import download_asset
@@ -38,24 +38,18 @@ def _get_phone_assets(target_sr: int) -> Tuple[torch.Tensor, torch.Tensor]:
         SAMPLE_RIR = download_asset(
             "tutorial-assets/Lab41-SRI-VOiCES-rm1-impulse-mc01-stu-clo-8000hz.wav"
         )
-        SAMPLE_NOISE = download_asset(
-            "tutorial-assets/Lab41-SRI-VOiCES-rm1-babb-mc01-stu-clo-8000hz.wav"
-        )
         rir_raw, rir_sr = torchaudio.load(SAMPLE_RIR)
-        noise_raw, noise_sr = torchaudio.load(SAMPLE_NOISE)
     except Exception as e:
-        raise RuntimeError(f"failed to load phone assets: {e}")
+        raise RuntimeError(f"failed to load RIR asset: {e}")
 
     if rir_sr != target_sr:
         rir_raw = tf_resample(rir_raw, rir_sr, target_sr)
-    if noise_sr != target_sr:
-        noise = tf_resample(noise_raw, noise_sr, target_sr)
 
     rir = rir_raw[:, int(target_sr * 1.01) : int(target_sr * 1.3)]
     rir = rir / torch.linalg.vector_norm(rir, ord=2)
 
-    _PHONE_CACHE[target_sr] = (rir, noise)
-    return rir, noise
+    _RIR_CACHE[target_sr] = rir
+    return rir
 
 
 
@@ -175,8 +169,8 @@ class Encoder(nn.Module):
         # 8000 // hop_length + 1 =51
         if (
             int(
-                stft_result.shape[-1]
-                - (self.voice_prefilling + self.future_amt) / self.delay_amt
+                (stft_result.shape[-1] - (self.voice_prefilling + self.future_amt))
+                / self.delay_amt
             )
             <= 0
         ):
@@ -261,11 +255,15 @@ class Encoder(nn.Module):
             # If caller didn't fix counts, compute them from target ms
             if self.smooth_chunks is None:
                 smooth_chunks = max(1, int(round(self.target_smooth_ms / hop_ms)))
+            else:
+                smooth_chunks = self.smooth_chunks
             if self.dilate_chunks is None:
                 dilate_chunks = max(0, int(round(self.target_dilate_ms / hop_ms)))
                 # in practice keep at least 1 for robustness at edges
                 if dilate_chunks == 0:
                     dilate_chunks = 1
+            else:
+                dilate_chunks = self.dilate_chunks
 
             # 2) Soft step around the threshold
             m_chunk = torch.sigmoid(
@@ -386,9 +384,8 @@ class Decoder(nn.Module):
     def forward(self, y, global_step=1):
         y_identity = y
         if self.distortion:
-            # Load demo assets and resample to sample_rate
-            rir, _ = _get_phone_assets(self.original_sample_rate)
-            rir = rir.to(y.device)
+            # Load the demo RIR and resample to sample_rate
+            rir = _get_rir(self.original_sample_rate).to(y.device)
             noise = torch.randn_like(y)
             # Apply RIR
             rir_applied = fftconvolve(y, rir, mode="same")

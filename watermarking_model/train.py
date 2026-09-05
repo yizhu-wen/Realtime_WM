@@ -72,9 +72,31 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
+def resolve_wandb_key():
+    """Return the wandb API key, or None to fall back to a cached `wandb login`.
+
+    Checked before the dataset scan so a missing credential fails in seconds
+    rather than after several minutes of scanning the corpus.
+    """
+    key = os.environ.get("WANDB_API_KEY")
+    if key:
+        return key
+    if os.path.exists(os.path.expanduser("~/.netrc")):
+        return None  # let wandb pick up the cached login
+    raise SystemExit(
+        "wandb.enabled is true in the train config but WANDB_API_KEY is not set.\n"
+        "  Set it:  export WANDB_API_KEY=<your key>\n"
+        "           (add that line to ~/.bashrc to make it permanent)\n"
+        "  Or:      set wandb.enabled: false in the train config to train without logging."
+    )
+
+
 def main(configs):
     logging.info("main function")
     process_config, model_config, train_config = configs
+
+    # Fail fast on a missing wandb credential, before the slow dataset scan.
+    wandb_key = resolve_wandb_key() if train_config["wandb"]["enabled"] else None
 
     pre_step = 0
     # ---------------- get train dataset
@@ -120,7 +142,9 @@ def main(configs):
 
     # Initialize wandb only if enabled in config
     if train_config["wandb"]["enabled"]:
-        wandb.login(key=train_config["wandb"]["key"])
+        # Key comes from WANDB_API_KEY, or None to use a cached `wandb login`.
+        # Never read a key committed to the config file.
+        wandb.login(key=wandb_key)
         wandb.init(
             project=train_config["wandb"]["project"],
             name=train_config["wandb"]["name"],
@@ -246,7 +270,8 @@ def main(configs):
     for ep in range(1, epoch_num + 1):
         encoder.train()
         decoder.train()
-        discriminator.train()
+        if train_config["adv"]:
+            discriminator.train()
         step = 0
         logging.info("Epoch {}/{}".format(ep, epoch_num))
         train_avg_acc = [0, 0]
@@ -287,9 +312,7 @@ def main(configs):
 
             # adv
             if train_config["adv"]:
-                lambda_a = lambda_m = train_config["optimize"][
-                    "lambda_a"
-                ]  # modify weights of m and a for better convergence
+                lambda_a = train_config["optimize"]["lambda_a"]
                 g_target_label_encoded = torch.full((b, 1), 1, device=device).float()
                 d_on_encoded_for_enc = discriminator(y_wm[:, offset_samples:end])
                 # target label for encoded images should be 'cover', because we want to fool the discriminator
@@ -307,6 +330,12 @@ def main(configs):
             my_step(en_de_op, lr_sched, global_step, train_len)
 
             if train_config["adv"]:
+                # sum_loss.backward() above also deposited the generator's
+                # adversarial gradient on the discriminator (g_loss_adv flows
+                # through it). Clear it so the discriminator is updated only by
+                # its own objective, not by the term that tries to fool it.
+                d_op.zero_grad()
+
                 d_target_label_cover = torch.full((b, 1), 1, device=device).float()
                 d_on_cover = discriminator(wav_matrix[:, offset_samples:end])
                 d_loss_on_cover = F.binary_cross_entropy_with_logits(
@@ -350,8 +379,10 @@ def main(configs):
 
             if step % show_circle == 0:
                 logging.info("-" * 100)
-                logging.info(
-                    "step:{} - wav_loss:{:.8f} - msg_loss:{:.8f} - tfloudness_loss:{:.8f} - acc:[{:.8f},{:.8f}] - snr:{:.8f} - norm:{:.8f} - patch_num:{} - pad_num:{} - wav_len:{} ".format(
+                msg_line = (
+                    "step:{} - wav_loss:{:.8f} - msg_loss:{:.8f} - tfloudness_loss:{:.8f}"
+                    " - acc:[{:.8f},{:.8f}] - snr:{:.8f} - norm:{:.8f}"
+                    " - patch_num:{} - pad_num:{} - wav_len:{}".format(
                         step,
                         losses[0],
                         losses[1],
@@ -363,10 +394,13 @@ def main(configs):
                         sample["patch_num"].tolist(),
                         sample["pad_num"].tolist(),
                         wav_matrix.shape[-1],
-                        d_loss_on_encoded.item(),
-                        d_loss_on_cover.item(),
                     )
                 )
+                if train_config["adv"]:
+                    msg_line += " - d_loss_on_encoded:{:.8f} - d_loss_on_cover:{:.8f}".format(
+                        d_loss_on_encoded.item(), d_loss_on_cover.item()
+                    )
+                logging.info(msg_line)
 
         train_avg_acc[0] /= step
         train_avg_acc[1] /= step
@@ -376,6 +410,22 @@ def main(configs):
         train_avg_loudness_loss /= step
         train_avg_d_loss_on_encoded /= step
         train_avg_d_loss_on_cover /= step
+
+        logging.info("#t" * 60)
+        logging.info(
+            "epoch:{} [train] - wav_loss:{:.8f} - msg_loss:{:.8f} - tfloudness_loss:{:.8f}"
+            " - acc:[{:.8f},{:.8f}] - snr:{:.8f} - d_loss_on_encoded:{:.8f} - d_loss_on_cover:{:.8f}".format(
+                ep,
+                train_avg_wav_loss,
+                train_avg_msg_loss,
+                train_avg_loudness_loss,
+                train_avg_acc[0],
+                train_avg_acc[1],
+                train_avg_snr,
+                train_avg_d_loss_on_encoded,
+                train_avg_d_loss_on_cover,
+            )
+        )
 
         train_metrics = {
             "train/wav_loss": train_avg_wav_loss,
@@ -394,13 +444,22 @@ def main(configs):
                 path = os.path.join(train_config["path"]["ckpt"], "pth")
             else:
                 path = os.path.join(train_config["path"]["ckpt"], "pth_ab")
-            save_op(path, ep, encoder, decoder, en_de_op)
+            save_op(
+                path,
+                ep,
+                encoder,
+                decoder,
+                en_de_op,
+                discriminator if train_config["adv"] else None,
+                d_op if train_config["adv"] else None,
+            )
 
         # ---------------- validation
         with torch.no_grad():
             encoder.eval()
             decoder.eval()
-            discriminator.eval()
+            if train_config["adv"]:
+                discriminator.eval()
             val_avg_acc = [0, 0]
             val_avg_snr = 0
             val_avg_wav_loss = 0
@@ -430,7 +489,7 @@ def main(configs):
                 )
                 # adv
                 if train_config["adv"]:
-                    lambda_a = lambda_m = train_config["optimize"]["lambda_a"]
+                    lambda_a = train_config["optimize"]["lambda_a"]
                     g_target_label_encoded = torch.full(
                         (b, 1), 1, device=device
                     ).float()
@@ -463,12 +522,13 @@ def main(configs):
                 )
                 val_avg_acc[0] += decoder_acc[0]
                 val_avg_acc[1] += decoder_acc[1]
-                val_avg_snr += snr
+                val_avg_snr += snr.item()
                 val_avg_wav_loss += losses[0].item()
                 val_avg_msg_loss += losses[1].item()
                 val_avg_loudness_loss += losses[2].item()
-                val_avg_d_loss_on_cover += d_loss_on_cover
-                val_avg_d_loss_on_encoded += d_loss_on_encoded
+                if train_config["adv"]:
+                    val_avg_d_loss_on_cover += d_loss_on_cover.item()
+                    val_avg_d_loss_on_encoded += d_loss_on_encoded.item()
             val_avg_acc[0] /= count
             val_avg_acc[1] /= count
             val_avg_snr /= count
@@ -479,7 +539,7 @@ def main(configs):
             val_avg_d_loss_on_cover /= count
             logging.info("#e" * 60)
             logging.info(
-                "epoch:{} - wav_loss:{:.8f} - msg_loss:{:.8f} - tfloudness_loss:{:.8f} - acc:[{:.8f},{:.8f}] - snr:{:.8f} - d_loss_on_encoded:{} - d_loss_on_cover:{}".format(
+                "epoch:{} - wav_loss:{:.8f} - msg_loss:{:.8f} - tfloudness_loss:{:.8f} - acc:[{:.8f},{:.8f}] - snr:{:.8f} - d_loss_on_encoded:{:.8f} - d_loss_on_cover:{:.8f}".format(
                     ep,
                     val_avg_wav_loss,
                     val_avg_msg_loss,
@@ -487,8 +547,8 @@ def main(configs):
                     val_avg_acc[0],
                     val_avg_acc[1],
                     val_avg_snr,
-                    val_avg_d_loss_on_encoded.item(),
-                    val_avg_d_loss_on_cover.item(),
+                    val_avg_d_loss_on_encoded,
+                    val_avg_d_loss_on_cover,
                 )
             )
 
@@ -509,7 +569,8 @@ def main(configs):
     with torch.inference_mode():
         encoder.eval()
         decoder.eval()
-        discriminator.eval()
+        if train_config["adv"]:
+            discriminator.eval()
         test_avg_acc = [0, 0]
         test_avg_snr = 0
         test_avg_wav_loss = 0
@@ -537,7 +598,7 @@ def main(configs):
             )
             # adv
             if train_config["adv"]:
-                lambda_a = lambda_m = train_config["optimize"]["lambda_a"]
+                lambda_a = train_config["optimize"]["lambda_a"]
                 g_target_label_encoded = torch.full((b, 1), 1, device=device).float()
                 d_on_encoded_for_enc = discriminator(y_wm[:, offset_samples:end])
                 g_loss_adv = F.binary_cross_entropy_with_logits(
@@ -567,12 +628,13 @@ def main(configs):
             )
             test_avg_acc[0] += decoder_acc[0]
             test_avg_acc[1] += decoder_acc[1]
-            test_avg_snr += snr
-            test_avg_wav_loss += losses[0]
-            test_avg_msg_loss += losses[1]
-            test_avg_loudness_loss += losses[2]
-            test_avg_d_loss_on_cover += d_loss_on_cover
-            test_avg_d_loss_on_encoded += d_loss_on_encoded
+            test_avg_snr += snr.item()
+            test_avg_wav_loss += losses[0].item()
+            test_avg_msg_loss += losses[1].item()
+            test_avg_loudness_loss += losses[2].item()
+            if train_config["adv"]:
+                test_avg_d_loss_on_cover += d_loss_on_cover.item()
+                test_avg_d_loss_on_encoded += d_loss_on_encoded.item()
 
         test_avg_acc[0] /= count
         test_avg_acc[1] /= count
@@ -593,15 +655,15 @@ def main(configs):
         )
         logging.info("#test" * 20)
         logging.info(
-            "Test: wav_loss:{:.8f} - msg_loss:{:.8f} - tfloudness_loss:{:.8f} - acc:[{:.8f},{:.8f}] - snr:{:.8f} - d_loss_on_encoded:{} - d_loss_on_cover:{}".format(
+            "Test: wav_loss:{:.8f} - msg_loss:{:.8f} - tfloudness_loss:{:.8f} - acc:[{:.8f},{:.8f}] - snr:{:.8f} - d_loss_on_encoded:{:.8f} - d_loss_on_cover:{:.8f}".format(
                 test_avg_wav_loss,
                 test_avg_msg_loss,
                 test_avg_loudness_loss,
                 test_avg_acc[0],
                 test_avg_acc[1],
                 test_avg_snr,
-                test_avg_d_loss_on_encoded.item(),
-                test_avg_d_loss_on_cover.item(),
+                test_avg_d_loss_on_encoded,
+                test_avg_d_loss_on_cover,
             )
         )
 

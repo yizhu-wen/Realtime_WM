@@ -67,5 +67,6 @@ wandb:
   enabled: true  # Set to true to enable wandb logging
   project: "real-time-voice-watermark"
   name: "FullSet"
-  key: "9a11e5364efe3bb8fedb3741188ee0d714e942e2"
+  # API key is read from the WANDB_API_KEY environment variable.
+  # Do not commit a key here.
 
