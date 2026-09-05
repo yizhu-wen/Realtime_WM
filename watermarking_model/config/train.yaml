@@ -3,7 +3,7 @@ dataset: "librispeech"
 adv: True
 
 path:
-  raw_path: "/dataset/LibriSpeech_wav"
+  raw_path: "/data/yizwen/LibriSpeech_wav"
   wm_speech: "./results/wm_speech"
   ckpt: "results/ckpt/"
   log_path: "results/log/"
