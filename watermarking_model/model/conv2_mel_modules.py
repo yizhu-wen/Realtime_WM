@@ -1,4 +1,3 @@
-from base64 import encode
 import torch
 import torch.nn as nn
 from torch.nn import LeakyReLU
@@ -9,22 +8,18 @@ from .blocks import (
     WatermarkExtracter,
     ReluBlock,
 )
-from distortions.frequency import TacotronSTFT, fixed_STFT, tacotron_mel
+from distortions.frequency import TacotronSTFT, fixed_STFT
 import julius
-import math
 import torch.nn.functional as F
 from silero_vad import load_silero_vad
 from torchaudio.functional import resample as tf_resample
 from torchaudio.functional import (
     fftconvolve,
     add_noise,
-    highpass_biquad,
-    lowpass_biquad,
 )
 
 import torchaudio
 from typing import Dict, Tuple
-import random
 
 # Optional: set up a small constant
 EPS = 1e-9
@@ -63,113 +58,6 @@ def _get_phone_assets(target_sr: int) -> Tuple[torch.Tensor, torch.Tensor]:
     return rir, noise
 
 
-def save_spectrum(y, flag="linear"):
-    import numpy as np
-    import os
-    import librosa
-    import librosa.display
-    import matplotlib.pyplot as plt
-
-    # Directory to save figures
-    root = "draw_figure"
-    os.makedirs(root, exist_ok=True)
-
-    plt.figure(figsize=(10, 4))
-    plt.specgram(
-        y, Fs=16000, NFFT=320, noverlap=160, window=np.hanning(320), cmap="magma"
-    )
-
-    plt.colorbar(format="%+2.0f dB")
-    plt.title("Amplitude Spectrogram")
-    plt.tight_layout()
-    plt.savefig(
-        os.path.join(root, f"{flag}_amplitude_spectrogram.png"),
-        bbox_inches="tight",
-        pad_inches=0.0,
-    )
-    plt.close()
-
-
-def save_spectrum_normal(y, flag="linear"):
-    import numpy as np
-    import os
-    import librosa
-    import librosa.display
-    import matplotlib.pyplot as plt
-
-    peak = np.max(np.abs(y))
-    if peak > 1e-8:
-        y = y / peak
-
-    # Directory to save figures
-    root = "draw_figure"
-    os.makedirs(root, exist_ok=True)
-
-    plt.figure(figsize=(10, 4))
-
-    # Compute the spectrogram
-    Pxx, freqs, bins, im = plt.specgram(
-        y, Fs=16000, NFFT=320, noverlap=160, cmap="magma"
-    )
-
-    Pxx_dB = librosa.amplitude_to_db(Pxx, ref=np.max)
-
-    # Clear previous plot and redraw with log values
-    plt.clf()
-    plt.figure(figsize=(10, 4))
-    plt.pcolormesh(bins, freqs, Pxx_dB, shading="auto", cmap="magma")
-
-    plt.colorbar(format="%+2.0f dB")
-    plt.title("Log Amplitude Spectrogram")
-    plt.tight_layout()
-    plt.savefig(
-        os.path.join(root, f"{flag}_amplitude_spectrogram.png"),
-        bbox_inches="tight",
-        pad_inches=0.0,
-    )
-    plt.close()
-
-
-def save_feature_map(feature_maps):
-    import os
-    import matplotlib.pyplot as plt
-    import librosa
-    import numpy as np
-    import librosa.display
-
-    feature_maps = feature_maps.cpu().numpy()
-    root = "draw_figure"
-    output_folder = os.path.join(root, "feature_map_or")
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-    n_channels = feature_maps.shape[0]
-    for channel_idx in range(n_channels):
-        fig, ax = plt.subplots()
-        ax.imshow(feature_maps[channel_idx, :, :], cmap="gray")
-        ax.axis("off")
-        output_file = os.path.join(
-            output_folder, f"feature_map_channel_{channel_idx + 1}.png"
-        )
-        plt.savefig(output_file, bbox_inches="tight", pad_inches=0.0)
-        plt.close(fig)
-
-
-def save_waveform(a_tensor, flag="original"):
-    import os
-    import librosa
-    import librosa.display
-    import matplotlib.pyplot as plt
-    import numpy as np
-    import soundfile
-
-    root = "draw_figure"
-    y = a_tensor.detach().cpu().numpy()
-    soundfile.write(os.path.join(root, flag + "_waveform.wav"), y, samplerate=16000)
-    # D = librosa.stft(y)
-    # spectrogram = np.abs(D)
-    # img=librosa.display.specshow(librosa.amplitude_to_db(spectrogram, ref=np.max), sr=22050, x_axis='time', y_axis='log', y_coords=None);
-    # plt.axis('off')
-    # plt.savefig(os.path.join(root, flag + '_amplitude_spectrogram_from_waveform.png'), bbox_inches='tight', pad_inches=0.0)
 
 
 class Encoder(nn.Module):

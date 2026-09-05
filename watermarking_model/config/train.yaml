@@ -3,10 +3,7 @@ dataset: "librispeech"
 adv: True
 
 path:
-#  raw_path: "/home/yizhu/Data/LibriSpeech_wav"
   raw_path: "/dataset/LibriSpeech_wav"
-#  raw_path: "/dataset/merge_libri_voxcel"
-#  raw_path: "/home/yizhu/Data/LJSpeech-1.1"
   raw_path_test: "experiments/cloned_speechs"
   wm_speech: "./results/wm_speech"
   ckpt: "results/ckpt/"
@@ -15,7 +12,7 @@ path:
 watermark:
   length: 10
   delay_amt_second: 0.5
-  future_amt_second: 0.25
+  future_amt_second: 0.5
 
 optimize:
   lr: 0.0001
@@ -64,8 +61,8 @@ select_aug_mode:
 n_max_aug: null
 
 aug:
-  cutoff_freq_low: 500
-  cutoff_freq_high: 2000
+  cutoff_freq_low: 300
+  cutoff_freq_high: 3400
 
 wandb:
   enabled: true  # Set to true to enable wandb logging

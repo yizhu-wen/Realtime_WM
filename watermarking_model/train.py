@@ -4,18 +4,14 @@ import yaml
 import logging
 import argparse
 import wandb
-from io import BytesIO
-import matplotlib.cm as cm
 import numpy as np
-import matplotlib.pyplot as plt
 from torch.optim import Adam
 from rich.progress import track
 from torch.utils.data import DataLoader
 from model.loss import Loss_identity
-from utils.tools import save, log, save_op
-from utils.optimizer import ScheduledOptimMain, ScheduledOptimDisc, my_step
+from utils.tools import save_op
+from utils.optimizer import my_step
 from itertools import chain
-import librosa.display
 from torch.nn.functional import mse_loss
 from dataset.data import collate_fn
 import torch.nn.functional as F
@@ -24,16 +20,10 @@ from model.conv2_mel_modules import (
     Encoder,
     Decoder,
     Discriminator,
-    save_waveform,
-    save_spectrum,
-    save_spectrum_normal,
 )
 from dataset.data import WavDataset as MyDataset
-import tempfile
 import warnings
 import random
-import shutil
-from PIL import Image
 
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
@@ -53,39 +43,6 @@ if torch.cuda.is_available():
     print({"plans_in_use": used, "max_allowed": pc.max_size})
 
 
-def save_spectrogram_to_buffer(signal, sample_rate=16000):
-    buf = BytesIO()
-    plt.figure(figsize=(10, 4))
-    plt.specgram(
-        np.maximum(signal.cpu().detach().numpy(), 1e-10),
-        Fs=sample_rate,
-        NFFT=320,
-        noverlap=160,
-        window=np.hanning(320),
-        cmap="magma",
-        vmin=-100,
-    )
-    plt.colorbar(format="%+2.0f dB")
-    plt.tight_layout()
-    plt.savefig(buf, format="png", bbox_inches="tight", pad_inches=0.0)
-    plt.close()
-    buf.seek(0)  # reset buffer pointer to beginning
-    return buf
-
-
-def buffer_to_wandb_image(buffer, caption=""):
-    # Convert the buffer to a PIL Image, then to a numpy array.
-    img = Image.open(buffer)
-    np_img = np.array(img)
-    return wandb.Image(np_img, caption=caption)
-
-
-def normalize_audio(y: torch.Tensor) -> torch.Tensor:
-    """Normalize an audio tensor so its maximum absolute value is 1."""
-    peak = torch.max(torch.abs(y))
-    if peak.item() > 1e-8:
-        y = y / peak
-    return y
 
 
 # Set random seed for reproducibility
@@ -438,7 +395,6 @@ def main(configs):
             else:
                 path = os.path.join(train_config["path"]["ckpt"], "pth_ab")
             save_op(path, ep, encoder, decoder, en_de_op)
-            # shutil.copyfile(os.path.realpath(__file__), os.path.join(path, os.path.basename(os.path.realpath(__file__)))) # save training scripts
 
         # ---------------- validation
         with torch.no_grad():
@@ -617,26 +573,6 @@ def main(configs):
             test_avg_loudness_loss += losses[2]
             test_avg_d_loss_on_cover += d_loss_on_cover
             test_avg_d_loss_on_encoded += d_loss_on_encoded
-            # Initialize wandb only if enabled in config
-            # if train_config["wandb"]["enabled"]:
-            #     if count <= num_save_img:
-            #         with tempfile.TemporaryDirectory() as tmpdir:
-            #             # Normalize each audio signal:
-            #             y_norm = normalize_audio(wav_matrix[0].cpu().detach())
-            #             y_wm_norm = normalize_audio(y_wm[0].cpu().detach())
-            #             wm_norm = normalize_audio(watermark[0].cpu().detach())
-            #
-            #             original_buf = save_spectrogram_to_buffer(y_norm)
-            #             watermarked_buf = save_spectrogram_to_buffer(y_wm_norm)
-            #             watermark_buf = save_spectrogram_to_buffer(wm_norm)
-            #
-            #             test_audio_table.add_data(
-            #                 wandb.Audio(wav_matrix[0].cpu().detach().numpy(), sample_rate=sample_rate),
-            #                 wandb.Audio(y_wm[0].cpu().detach().numpy(), sample_rate=sample_rate),
-            #                 wandb.Audio(watermark[0].cpu().detach().numpy(), sample_rate=sample_rate),
-            #                 buffer_to_wandb_image(original_buf),
-            #                 buffer_to_wandb_image(watermarked_buf),
-            #                 buffer_to_wandb_image(watermark_buf))
 
         test_avg_acc[0] /= count
         test_avg_acc[1] /= count
