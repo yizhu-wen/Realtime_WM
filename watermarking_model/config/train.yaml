@@ -33,7 +33,7 @@ optimize:
   distortion: true          # RIR + noise + bandpass before decoding
 
 iter:
-  epoch: 60
+  epoch: 50
   save_circle: 5      # checkpoint every N epochs
   show_circle: 1000   # log every N steps
   data_divider: 1     # train on 1/N of the data
