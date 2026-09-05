@@ -273,7 +273,8 @@ def main(configs, restore_ckpt=None):
     lambda_m = train_config["optimize"]["lambda_m"]
     lambda_b = train_config["optimize"]["lambda_b"]
     hop_length = process_config["mel"]["hop_length"]
-    offset_samples = 40480  # ((204+50)-1)*160
+    # derived from the encoder's own prefill/lookahead, not hardcoded
+    offset_samples = encoder.offset_samples
     train_len = len(train_audios_loader)
     global_step = (start_epoch - 1) * train_len
     # StepLR is advanced once per epoch by my_step; fast-forward it so a

@@ -11,7 +11,6 @@ from .blocks import (
 from distortions.frequency import TacotronSTFT, fixed_STFT
 import julius
 import torch.nn.functional as F
-from silero_vad import load_silero_vad
 from torchaudio.functional import resample as tf_resample
 from torchaudio.functional import (
     fftconvolve,
@@ -92,14 +91,13 @@ class Encoder(nn.Module):
             - 1
         )  # 50
         self.power = 1.0
+        # First sample that can carry a watermark: the prefill plus the
+        # look-ahead gap. Derived from the same config the chunk loop uses so
+        # it tracks changes to audio_prefilling / delay / future amounts.
+        self.offset_samples = (
+            self.voice_prefilling + self.future_amt - 1
+        ) * self.hop_length
 
-        self.smooth_chunks = train_config["optimize"]["smooth_chunks"]
-        self.dilate_chunks = train_config["optimize"]["dilate_chunks"]
-        self.target_smooth_ms = train_config["optimize"]["target_smooth_ms"]
-        self.target_dilate_ms = train_config["optimize"]["target_dilate_ms"]
-        self.tau = train_config["optimize"]["tau"]
-        self.vad = load_silero_vad()
-        self.vad_threshold = 0.50
 
         # MLP for the input wm
         # self.msg_linear_in = FCBlock(msg_length, self.win_dim, activation=LeakyReLU(inplace=True))
@@ -227,8 +225,7 @@ class Encoder(nn.Module):
                 stft_result, watermark, self.voice_prefilling
             )
             del list_of_watermarks
-            mask = stft_result != 0
-            all_watermark_stft = all_watermark_stft * mask + 0.0000001
+            all_watermark_stft = all_watermark_stft + 0.0000001
 
             # Recompute magnitude & phase
             real_part = all_watermark_stft[:, 0, :, :]
@@ -239,106 +236,7 @@ class Encoder(nn.Module):
             y = self.stft.inverse(spect, phase).squeeze(1)
             del spect, phase, real_part, imag_part, all_watermark_stft
 
-            with torch.no_grad():
-                # Get chunk-level speech probabilities for the batch.
-                # The output shape should be [batch, num_chunks]
-                batch_chunk_probs = self.vad.audio_forward(x, sr=self.sampling_rate)
-            p = batch_chunk_probs.to(device=y.device, dtype=y.dtype)  # [B, C]
-            C = p.shape[-1]
-
-            # --- infer hop in ms from C, T, sr ---
-            # chunks_per_sec = C * sr / T; hop_ms = 1000 / chunks_per_sec
-            hop_ms = 1000.0 * self.stft.num_samples / (C * self.sampling_rate)
-
-            # If caller didn't fix counts, compute them from target ms
-            if self.smooth_chunks is None:
-                smooth_chunks = max(1, int(round(self.target_smooth_ms / hop_ms)))
-            else:
-                smooth_chunks = self.smooth_chunks
-            if self.dilate_chunks is None:
-                dilate_chunks = max(0, int(round(self.target_dilate_ms / hop_ms)))
-                # in practice keep at least 1 for robustness at edges
-                if dilate_chunks == 0:
-                    dilate_chunks = 1
-            else:
-                dilate_chunks = self.dilate_chunks
-
-            # 2) Soft step around the threshold
-            m_chunk = torch.sigmoid(
-                (p - self.vad_threshold) / self.tau
-            )  # [B, C] in (0, 1)
-
-            # 3) Smooth in chunk space (moving average)
-            if smooth_chunks > 1:
-                k = (
-                    torch.ones(1, 1, smooth_chunks, device=y.device, dtype=y.dtype)
-                    / smooth_chunks
-                )
-                z = m_chunk.unsqueeze(1)  # [B,1,C]
-                pad = smooth_chunks // 2
-                z = F.pad(z, (pad, pad), mode="replicate")
-                m_chunk = F.conv1d(z, k, stride=1).squeeze(1)  # [B, C]
-
-            # 4) Dilate voiced regions by max-pool
-            if dilate_chunks > 0:
-                z = m_chunk.unsqueeze(1)  # [B,1,C]
-                pad = dilate_chunks
-                z = F.pad(z, (pad, pad), mode="replicate")
-                m_chunk = F.max_pool1d(z, kernel_size=2 * pad + 1, stride=1).squeeze(
-                    1
-                )  # [B, C]
-
-            # 5) Upsample to sample grid
-            m_up = F.interpolate(
-                m_chunk.unsqueeze(1),
-                size=self.stft.num_samples,
-                mode="linear",
-                align_corners=True,
-            ).squeeze(
-                1
-            )  # [B, T]
-
-            # After computing m_up ...
-            frame_size = 512
-            rms = x.unfold(
-                -1, frame_size, frame_size // 2
-            )  # [B, num_frames, frame_size]
-            rms = rms.pow(2).mean(dim=-1).sqrt()  # [B, num_frames]
-            # Normalize RMS into [0,1] (prevent divide-by-zero)
-            rms = rms / (rms.max(dim=1, keepdim=True).values + 1e-8)
-
-            # Upsample RMS back to sample level and map to floor in [floor_min,floor_max].
-            dynamic_floor = F.interpolate(
-                rms.unsqueeze(1),
-                size=self.stft.num_samples,
-                mode="linear",
-                align_corners=True,
-            ).squeeze(1)
-            floor_min, floor_max = 0.05, 0.2
-            dynamic_floor = floor_min + (floor_max - floor_min) * dynamic_floor
-
-            # Now build the mask using this per-sample floor
-            soft_sample_masks = (dynamic_floor + (1.0 - dynamic_floor) * m_up).clamp_(
-                0.0, 1.0
-            )
-
-
-            masked_y = y * soft_sample_masks
-            # # Threshold the probabilities to obtain a binary mask per chunk.
-            # batch_chunk_mask = (batch_chunk_probs > self.vad_threshold).float()
-            #
-            # # Upsample the chunk-level mask to a sample-level mask.
-            # # Each chunk's decision is repeated for chunk_size samples.
-            # sample_masks = torch.repeat_interleave(batch_chunk_mask, 512, dim=1).to(y.device)
-            #
-            # # Since the upsampled mask might be longer than the actual audio length,
-            # # slice the mask to match the original number of samples.
-            # sample_masks = sample_masks[:, :self.stft.num_samples]
-
-            # # Apply the mask to the original audio to zero out non-speech regions.
-            # masked_y = y * sample_masks
-
-            return masked_y, zeros_right.shape[-1]
+            return y, zeros_right.shape[-1]
         else:
             print("Not enough watermarking!!!!")
             return None
@@ -382,7 +280,10 @@ class Decoder(nn.Module):
             rir = _get_rir(self.original_sample_rate).to(y.device)
             noise = torch.randn_like(y)
             # Apply RIR
-            rir_applied = fftconvolve(y, rir, mode="same")
+            # mode="full" truncated to the input length keeps the response
+            # causal. mode="same" centres it, which put ~145 ms of
+            # reverberation *before* the sound that caused it.
+            rir_applied = fftconvolve(y, rir, mode="full")[..., : y.shape[-1]]
             snr_db = torch.randint(20, 26, (1,), device=y.device)
             bg_added = add_noise(rir_applied, noise, snr_db)
 

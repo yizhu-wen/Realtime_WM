@@ -24,12 +24,6 @@ optimize:
   betas: [0.9, 0.98]
   eps: 0.000000001
   weight_decay: 0.0
-  # VAD mask shaping
-  smooth_chunks: null       # null => derive from target_smooth_ms
-  dilate_chunks: null       # null => derive from target_dilate_ms
-  target_smooth_ms: 40
-  target_dilate_ms: 15
-  tau: 0.15                 # softness of the VAD threshold
   distortion: true          # RIR + noise + bandpass before decoding
 
 iter:
@@ -41,6 +35,6 @@ iter:
 wandb:
   enabled: true
   project: "real-time-voice-watermark"
-  name: "full_50ep_lm10-lb1_delay0.5_future0.5"
+  name: "full_50ep_lm10-lb1_delay0.5_future0.5_resume-ep6"
   # API key is read from the WANDB_API_KEY environment variable.
   # Do not commit a key here.
