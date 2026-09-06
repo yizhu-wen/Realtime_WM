@@ -84,56 +84,82 @@ omitted the discriminator so adversarial runs could not resume; plus an
 operator-precedence error in the encoder chunk guard and an `UnboundLocalError`
 if `smooth_chunks`/`dilate_chunks` were set non-null.
 
-## Active run (started 2026-09-05 03:04)
+## Last run: completed 50 epochs (2026-09-06)
 
-Fresh 50-epoch run on the full dataset, with the VAD/mask/RIR changes in
-`e86ae20`. Launched detached (`setsid`) so it survives this session.
+First full run on the no-VAD architecture (`e86ae20`). Ran 31.9 h, 50/50
+epochs, zero errors.
 
 - wandb: https://wandb.ai/yizhuwenus-university-of-hawaii-system/real-time-voice-watermark/runs/b6hzmqft
 - run name: `novad_50ep_lm10-lb1_delay0.5_future0.5_causalRIR`
-- log: `watermarking_model/results/log/novad_full_20260905_030352.log` (gitignored)
-- main trainer pid at launch: 3857065
-- settings: 28539 train files, batch 8, `lambda_m: 10`, `lambda_b: 1`,
-  delay/future 0.5s, `adv: True`, `distortion: true`
-- ETA ~38 h
+- checkpoints: `results/ckpt/pth/none-conv2_ep_{5..50}_*.pth.tar` (11 files)
+- final: `none-conv2_ep_50_2026-09-06_10_53_55.pth.tar`
 
-Finding the pid: the trainer is the process orphaned by `setsid` (ppid 1);
-`pgrep -f "python train.py"` also matches its 22 DataLoader workers, so
-grabbing the first match gets a worker and looks like the run died.
+Reported test line: `acc [0.9733, 0.9503]  snr -9.51 dB`
 
-```bash
-for p in $(pgrep -f "python train.py -p config"); do
-  [ "$(awk '{print $4}' /proc/$p/stat)" = 1 ] && echo $p; done
-```
+### Do not trust the headline accuracy
 
-**Killing it needs the process group.** `persistent_workers=True` with
-`num_workers=20` means killing the parent leaves ~40 orphaned workers holding
-~53 GB of VRAM. Kill the group, then sweep by command line, then confirm the
-GPU actually dropped to ~2 MiB.
+The reported number is measured on padded batches, and the encoder learned to
+use the padding. Measured on the epoch-50 checkpoint, held-out test set:
 
-### Previous run (superseded)
+| condition | acc |
+| --- | --- |
+| batch 8, natural lengths, padded (as reported) | 0.976 / 0.956 |
+| batch 1, natural length, no padding | 0.758 / 0.750 |
 
-50-epoch run at `wgr5miqz`, killed by the user after 5 epochs (3h31m). It
-showed message decoding works well at full scale (val acc 0.929/0.969 by epoch
-5) while val SNR fell monotonically +0.59 -> -3.46 dB, and both discriminator
-losses collapsed to ~1e-3. Its epoch-5 checkpoint is at
-`results/ckpt/pth/none-conv2_ep_5_2026-09-05_01_38_25.pth.tar`, but it predates
-`e86ae20` and was trained with VAD gating that no longer exists, so it is not a
-valid warm start for the current architecture.
+Isolating padding alone -- identical 8 s of audio, identical messages, batch of
+8, differing *only* in trailing zeros:
+
+| condition | acc |
+| --- | --- |
+| no padding | 0.9175 / 0.8863 |
+| same audio + 3 s of zero padding | 0.9900 / 0.9775 |
+
+So padding is worth ~7-9 points on matched audio; the rest of the gap to 0.758
+is utterance duration (shorter clips give fewer watermark chunks). Watermark
+power confirms the mechanism: 2.98e-02 inside speech vs **2.61e-02 in the zero
+padding** -- the encoder puts almost as much energy into silence as into
+speech, and the decoder's `mean(dim=2)` reads it back.
+
+This is the shortcut that `mask = stft_result != 0` had been suppressing.
+
+### SNR is the bigger problem
+
+Val SNR fell monotonically for all 50 epochs and never recovered:
+
+| epoch | 1 | 6 | 16 | 26 | 36 | 50 |
+| --- | --- | --- | --- | --- | --- | --- |
+| val SNR dB | -1.57 | -2.80 | -5.82 | -6.89 | -7.90 | **-8.86** |
+
+The watermark ends ~9 dB *louder* than the speech. Both discriminator losses
+collapsed to 0.0 by epoch 36 -- it separates watermarked from cover trivially.
+Removing the VAD gate made this worse, not better (previous VAD run reached
+-3.46 dB by epoch 5; this one -2.80 at epoch 6 and kept going).
+
+`lambda_m: 10` against `lambda_b: 1` and `lambda_a: 0.01` does not constrain
+loudness at all, and the loudness term is itself crippled by padding (84% of
+its softmax weight lands on padding segments).
 
 ## Open items
 
-1. **Retune the loss weights.** Confirmed necessary at full scale by the run
-   above: val SNR fell from +0.6 dB to −3.5 dB over 5 epochs while accuracy
-   climbed to 0.93/0.97. The message term dominates and nothing bounds the
-   watermark's amplitude. Use ~5-epoch runs (~3.5 h) as the calibration loop.
+1. **Retune the loss weights.** Two full-scale runs now confirm it. The
+   50-epoch no-VAD run ended at -8.86 dB val SNR, falling monotonically the
+   whole way. `lambda_m: 10` vs `lambda_b: 1` / `lambda_a: 0.01` puts no
+   effective bound on watermark amplitude. Use ~5-epoch runs (~3.5 h) to
+   calibrate; accuracy is already >0.95 by epoch 5, so the only question is
+   how much SNR can be bought back.
 
-2. **Rotate the wandb API key.** It was committed in `config/train.yaml` and is
+2. **Close the padding shortcut.** Measured worth ~7-9 accuracy points on
+   matched audio, and it inflates every reported number. Fixed-length crops in
+   `WavDataset.__getitem__` remove it at the source and also fix the loudness
+   loss, which currently spends 84% of its softmax weight on padding segments.
+   Until then, evaluate with batch size 1.
+
+3. **Rotate the wandb API key.** It was committed in `config/train.yaml` and is
    still in git history (removing it from the working tree does not retract it).
    All those commits were on GitHub before this work started. Rotate at
    wandb.ai/settings.
 
-3. **`future_amt_second` is 0.5, but this branch is named `from-0.25s`.**
+4. **`future_amt_second` is 0.5, but this branch is named `from-0.25s`.**
    `d4fcb67` set it to 0.25; `0e7c300 "tide up"` reverted it to 0.5 inside a
    cleanup commit, which looks unintentional. Decide which value this branch is
    supposed to be testing. Not touched by this session's commits.
