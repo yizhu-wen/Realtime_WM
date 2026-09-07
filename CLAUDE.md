@@ -92,7 +92,11 @@ process via `shs/train_and_eval.sh`.
 - wandb: https://wandb.ai/yizhuwenus-university-of-hawaii-system/real-time-voice-watermark/runs/oljqa8wp
 - run name: `novad_50ep_lmeff0.01_band300-3400_causalRIR`
 - log: `watermarking_model/results/log/train_eval_20260907_005548.log` (gitignored)
-- wrapper pid 55537, trainer pid 55558
+- wrapper pid 55555 (`/bin/bash ./shs/train_and_eval.sh`), trainer pid 55558
+  (its child). Finding these: `pgrep -f train_and_eval` returns transients too;
+  the wrapper is the bash process with ppid 1, and the trainer is its child.
+  The chain only reaches the evaluation step if the *wrapper* survives, so that
+  is the pid to watch, not the trainer.
 - ETA ~32 h training, then ~5 min evaluation
 
 What changed vs the previous run (`b6hzmqft`):
