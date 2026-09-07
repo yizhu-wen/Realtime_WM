@@ -84,60 +84,74 @@ omitted the discriminator so adversarial runs could not resume; plus an
 operator-precedence error in the encoder chunk guard and an `UnboundLocalError`
 if `smooth_chunks`/`dilate_chunks` were set non-null.
 
-## Last run: completed 50 epochs (2026-09-06)
+## Active run (started 2026-09-07 00:55)
 
-First full run on the no-VAD architecture (`e86ae20`). Ran 31.9 h, 50/50
-epochs, zero errors.
+Fresh 50-epoch run, then the distortion evaluation, chained in one detached
+process via `shs/train_and_eval.sh`.
 
-- wandb: https://wandb.ai/yizhuwenus-university-of-hawaii-system/real-time-voice-watermark/runs/b6hzmqft
-- run name: `novad_50ep_lm10-lb1_delay0.5_future0.5_causalRIR`
-- checkpoints: `results/ckpt/pth/none-conv2_ep_{5..50}_*.pth.tar` (11 files)
-- final: `none-conv2_ep_50_2026-09-06_10_53_55.pth.tar`
+- wandb: https://wandb.ai/yizhuwenus-university-of-hawaii-system/real-time-voice-watermark/runs/oljqa8wp
+- run name: `novad_50ep_lmeff0.01_band300-3400_causalRIR`
+- log: `watermarking_model/results/log/train_eval_20260907_005548.log` (gitignored)
+- wrapper pid 55537, trainer pid 55558
+- ETA ~32 h training, then ~5 min evaluation
 
-Reported test line: `acc [0.9733, 0.9503]  snr -9.51 dB`
+What changed vs the previous run (`b6hzmqft`):
 
-### Do not trust the headline accuracy
+1. **Effective message weight is now 0.01, not 10.** The user reinstated
+   `lambda_a = lambda_m = train_config["optimize"]["lambda_a"]` in the training
+   loop, which rebinds `lambda_m` from step 2 onward. `config/train.yaml` still
+   reads `lambda_m: 10.`; it does not describe what runs. Intended to pull the
+   balance back toward imperceptibility after the last run ended at -8.86 dB.
+2. **Decoder distortion band is 300-3400 Hz** (was 500-2000).
 
-The reported number is measured on padded batches, and the encoder learned to
-use the padding. Measured on the epoch-50 checkpoint, held-out test set:
+Expect (2) to matter for robustness: the previous model put 31% of watermark
+energy in 4-8 kHz where speech has 0.6%, and every band-limiting channel
+therefore destroyed it. A 300-3400 training channel should force the watermark
+into the band that survives.
 
-| condition | acc |
-| --- | --- |
-| batch 8, natural lengths, padded (as reported) | 0.976 / 0.956 |
-| batch 1, natural length, no padding | 0.758 / 0.750 |
+## Evaluation
 
-Isolating padding alone -- identical 8 s of audio, identical messages, batch of
-8, differing *only* in trailing zeros:
+`evaluate.py --ckpt <path> --n_items 200` scores a checkpoint on
+LibriSpeech-test and LJSpeech under: none, resample 8k, Gaussian noise (SNR 20),
+median filter, low-pass 2k/4k, high-pass 500, reencode, compression, noise
+suppression, phone call.
 
-| condition | acc |
-| --- | --- |
-| no padding | 0.9175 / 0.8863 |
-| same audio + 3 s of zero padding | 0.9900 / 0.9775 |
+Runs at **batch size 1** deliberately. Batched evaluation pads to the batch max
+and the encoder writes a watermark into that padding, which the decoder's mean
+over the time axis reads back -- worth ~7-9 points that do not exist at
+inference.
 
-So padding is worth ~7-9 points on matched audio; the rest of the gap to 0.758
-is utterance duration (shorter clips give fewer watermark chunks). Watermark
-power confirms the mechanism: 2.98e-02 inside speech vs **2.61e-02 in the zero
-padding** -- the encoder puts almost as much energy into silence as into
-speech, and the decoder's `mean(dim=2)` reads it back.
+LJSpeech is at `/data/yizwen/LJSpeech-1.1_wav`: 22.05 kHz, 13100 clips split
+across the root (7360) and `wavs/` (5740), no overlap. It needs its own loader
+because `WavDataset` assumes the LibriSpeech split layout and does not resample
+(`or_sample_rate == sample_rate` in the config).
 
-This is the shortcut that `mask = stft_result != 0` had been suppressing.
+### Previous run (b6hzmqft), for comparison
 
-### SNR is the bigger problem
+50 epochs, `lambda_m` effective 10, band 500-2000. Ended val SNR -8.86 dB with
+the watermark ~9 dB louder than the speech and both discriminator losses at 0.
 
-Val SNR fell monotonically for all 50 epochs and never recovered:
+| distortion | LibriSpeech | LJSpeech |
+| --- | --- | --- |
+| none | 0.7035 | 0.7010 |
+| resample_8k | 0.5322 | 0.5055 |
+| gaussian_noise_20 | 0.5693 | 0.5487 |
+| median_filter | 0.5317 | 0.5095 |
+| low_pass_2k | 0.5176 | 0.4980 |
+| low_pass_4k | 0.5312 | 0.5075 |
+| high_pass_500 | **0.9729** | **0.9869** |
+| reencode | 0.7035 | 0.7010 |
+| compression | 0.7060 | 0.7085 |
+| noise_suppression | 0.7055 | 0.7010 |
+| phone_call | 0.6839 | 0.6879 |
+| SNR dB | -6.31 | -4.10 |
 
-| epoch | 1 | 6 | 16 | 26 | 36 | 50 |
-| --- | --- | --- | --- | --- | --- | --- |
-| val SNR dB | -1.57 | -2.80 | -5.82 | -6.89 | -7.90 | **-8.86** |
-
-The watermark ends ~9 dB *louder* than the speech. Both discriminator losses
-collapsed to 0.0 by epoch 36 -- it separates watermarked from cover trivially.
-Removing the VAD gate made this worse, not better (previous VAD run reached
--3.46 dB by epoch 5; this one -2.80 at epoch 6 and kept going).
-
-`lambda_m: 10` against `lambda_b: 1` and `lambda_a: 0.01` does not constrain
-loudness at all, and the loudness term is itself crippled by padding (84% of
-its softmax weight lands on padding segments).
+LJSpeech tracked LibriSpeech almost exactly, so corpus shift is not a problem.
+`high_pass_500` *beating* `none` is the diagnostic: watermark energy by band was
+0-0.5k 0.40, 0.5-2k 0.15, 2-4k 0.13, **4-8k 0.31**, against speech energy of
+0.45 / 0.52 / 0.03 / 0.006. Removing 0-500 Hz strips interference (+27 points);
+removing 4-8 kHz strips signal (-17). Filters were verified with a white-noise
+probe to rule out a filter bug.
 
 ## Open items
 
