@@ -254,8 +254,8 @@ class Decoder(nn.Module):
         self.win_dim = int((process_config["mel"]["n_fft"] / 2) + 1)
         self.hop_length = process_config["mel"]["hop_length"]
         self.distortion = train_config["optimize"]["distortion"]
-        self.cutoff_freq_low = 500
-        self.cutoff_freq_high = 2000
+        self.cutoff_freq_low = 300
+        self.cutoff_freq_high = 3400
         self.block = model_config["conv2"]["block"]
         self.EX = WatermarkExtracter(
             input_channel=2,
