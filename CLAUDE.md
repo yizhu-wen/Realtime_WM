@@ -84,34 +84,39 @@ omitted the discriminator so adversarial runs could not resume; plus an
 operator-precedence error in the encoder chunk guard and an `UnboundLocalError`
 if `smooth_chunks`/`dilate_chunks` were set non-null.
 
-## Active run (started 2026-09-07 00:55)
+## Last run: completed but collapsed (2026-09-08)
 
-Fresh 50-epoch run, then the distortion evaluation, chained in one detached
-process via `shs/train_and_eval.sh`.
+50/50 epochs, 31.8 h, zero errors -- and no usable model. Run `oljqa8wp`,
+`novad_50ep_lmeff0.01_band300-3400_causalRIR`.
 
-- wandb: https://wandb.ai/yizhuwenus-university-of-hawaii-system/real-time-voice-watermark/runs/oljqa8wp
-- run name: `novad_50ep_lmeff0.01_band300-3400_causalRIR`
-- log: `watermarking_model/results/log/train_eval_20260907_005548.log` (gitignored)
-- wrapper pid 55555 (`/bin/bash ./shs/train_and_eval.sh`), trainer pid 55558
-  (its child). Finding these: `pgrep -f train_and_eval` returns transients too;
-  the wrapper is the bash process with ppid 1, and the trainer is its child.
-  The chain only reaches the evaluation step if the *wrapper* survives, so that
-  is the pid to watch, not the trainer.
-- ETA ~32 h training, then ~5 min evaluation
+The effective message weight of 0.01 removed any incentive to embed. The
+encoder drove the watermark to numerical zero and the decoder learned to output
+a constant 0:
 
-What changed vs the previous run (`b6hzmqft`):
+- watermark RMS **1.03e-08**, max |wm| 3.08e-07. The 16-bit PCM step is
+  3.05e-05, so the watermark is ~100x below the quantisation floor -- it cannot
+  survive being written to a wav file.
+- decoder output is exactly `[0, -0, -0, 0, ...]` for every bit
+- `msg_loss` pinned at exactly 2.00000000 = MSE(msg, 0) x 2
+- val SNR 131.8 dB; accuracy 0.49-0.51 under every distortion, both corpora
 
-1. **Effective message weight is now 0.01, not 10.** The user reinstated
-   `lambda_a = lambda_m = train_config["optimize"]["lambda_a"]` in the training
-   loop, which rebinds `lambda_m` from step 2 onward. `config/train.yaml` still
-   reads `lambda_m: 10.`; it does not describe what runs. Intended to pull the
-   balance back toward imperceptibility after the last run ended at -8.86 dB.
-2. **Decoder distortion band is 300-3400 Hz** (was 500-2000).
+**It was diagnosable after epoch 1** (40 min): SNR 70.6 dB, acc 0.4996,
+msg_loss 2.00020903. Nothing after that changed the outcome. Watch epoch 1 of
+any weighting change before letting a run go 32 h.
 
-Expect (2) to matter for robustness: the previous model put 31% of watermark
-energy in 4-8 kHz where speech has 0.6%, and every band-limiting channel
-therefore destroyed it. A 300-3400 training channel should force the watermark
-into the band that survives.
+### The two runs bracket the weighting
+
+| effective lambda_m | outcome |
+| --- | --- |
+| 0.01 (this run) | watermark -> 0, SNR +131 dB, accuracy at chance |
+| 10 (`b6hzmqft`) | message learned (0.70 honest / 0.97 padded), SNR -8.9 dB |
+
+So a usable value is strictly between. Note that
+`lambda_a = lambda_m = train_config["optimize"]["lambda_a"]` makes this
+impossible to sweep: it ties the message weight to the adversarial weight, so
+`lambda_m` cannot be varied from the config at all, and changing `lambda_a`
+moves both. Removing that line and setting `lambda_m` in the config is what
+makes a sweep possible.
 
 ## Evaluation
 
