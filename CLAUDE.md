@@ -84,39 +84,63 @@ omitted the discriminator so adversarial runs could not resume; plus an
 operator-precedence error in the encoder chunk guard and an `UnboundLocalError`
 if `smooth_chunks`/`dilate_chunks` were set non-null.
 
-## Last run: completed but collapsed (2026-09-08)
+## Best checkpoint so far (2026-09-09)
 
-50/50 epochs, 31.8 h, zero errors -- and no usable model. Run `oljqa8wp`,
-`novad_50ep_lmeff0.01_band300-3400_causalRIR`.
+`results/ckpt/pth/MSE_loudness_split_frequency_adaptive_soft_vad_phone_distortion_ep_60_2025-10-24_12_08_46.pth.tar`
+-- the VAD-era model, epoch 60, added by the user. Loads **strictly** into the
+current architecture (0 missing, 0 unexpected on both encoder and decoder). Its
+encoder state_dict carries 30 `vad.*` tensors, since silero is an nn.Module
+submodule.
 
-The effective message weight of 0.01 removed any incentive to embed. The
-encoder drove the watermark to numerical zero and the decoder learned to output
-a constant 0:
+It is far better than anything trained in this session: **0.98 clean accuracy
+at +37 to +43 dB SNR**, i.e. accurate *and* inaudible. Compare the two 50-epoch
+runs, which reached either 0.70 accuracy at -8.9 dB, or nothing at +131 dB.
 
-- watermark RMS **1.03e-08**, max |wm| 3.08e-07. The 16-bit PCM step is
-  3.05e-05, so the watermark is ~100x below the quantisation floor -- it cannot
-  survive being written to a wav file.
-- decoder output is exactly `[0, -0, -0, 0, ...]` for every bit
-- `msg_loss` pinned at exactly 2.00000000 = MSE(msg, 0) x 2
-- val SNR 131.8 dB; accuracy 0.49-0.51 under every distortion, both corpora
+| distortion | LibriSpeech-dev | LibriSpeech-test | LJSpeech |
+| --- | --- | --- | --- |
+| none | 0.9840 | 0.9804 | 0.9894 |
+| resample_8k | 0.6975 | 0.6955 | 0.7503 |
+| gaussian_noise_20 | 0.5615 | 0.5432 | 0.5291 |
+| median_filter | 0.9235 | 0.9005 | 0.9141 |
+| low_pass_2k | 0.6930 | 0.6930 | 0.7327 |
+| low_pass_4k | 0.7260 | 0.7226 | 0.7704 |
+| high_pass_500 | 0.9835 | 0.9809 | 0.9889 |
+| reencode | 0.9835 | 0.9804 | 0.9889 |
+| compression | 0.8995 | 0.9015 | 0.9141 |
+| noise_suppression | 0.9360 | 0.9266 | 0.9839 |
+| phone_call | 0.4825 | 0.4930 | 0.4854 |
+| phone_call_legacy | 0.9255 | 0.9206 | 0.9156 |
+| SNR dB | 38.41 | 37.08 | 42.97 |
 
-**It was diagnosable after epoch 1** (40 min): SNR 70.6 dB, acc 0.4996,
-msg_loss 2.00020903. Nothing after that changed the outcome. Watch epoch 1 of
-any weighting change before letting a run go 32 h.
+### The two phone rows
 
-### The two runs bracket the weighting
+`phone_call` uses the current `dl.py` channel: causal RIR (`mode="full"`) and a
+300-3400 Hz band. `phone_call_legacy` (attack 33) is the channel this
+checkpoint was trained against: centred RIR (`mode="same"`) and 500-2000 Hz.
 
-| effective lambda_m | outcome |
+The RIR mode is what decides it, not the band. On 80 test utterances:
+
+| variant | acc |
 | --- | --- |
-| 0.01 (this run) | watermark -> 0, SNR +131 dB, accuracy at chance |
-| 10 (`b6hzmqft`) | message learned (0.70 honest / 0.97 padded), SNR -8.9 dB |
+| 300-3400, causal | 0.4582 |
+| 500-2000, causal | 0.4848 |
+| 500-2000, `mode="same"` | 0.9165 |
+| 300-3400, `mode="same"` | 0.8899 |
 
-So a usable value is strictly between. Note that
-`lambda_a = lambda_m = train_config["optimize"]["lambda_a"]` makes this
-impossible to sweep: it ties the message weight to the adversarial weight, so
-`lambda_m` cannot be varied from the config at all, and changing `lambda_a`
-moves both. Removing that line and setting `lambda_m` in the config is what
-makes a sweep possible.
+`mode="same"` shifts the output by half the RIR length (~145 ms) relative to
+`mode="full"`. The model handles the channel it saw and collapses to chance on
+the corrected one, so the decoder is highly sensitive to time alignment. Read
+0.92 as "robust to its training channel" and 0.48 as "does not transfer to a
+physically correct one" -- a retrain against the causal RIR would settle it.
+
+### Restoring VAD needed three pieces, not one
+
+The merge brought back the `forward` block, `self.vad` and the import, but not
+the `__init__` assignments for `smooth_chunks`, `dilate_chunks`,
+`target_smooth_ms`, `target_dilate_ms`, `tau`, nor those five config keys (both
+removed in `e86ae20`). `Encoder(...)` constructed fine and only failed at
+`forward` with `AttributeError: 'Encoder' object has no attribute
+'smooth_chunks'`. All restored, plus `silero-vad` back in requirements.txt.
 
 ## Evaluation
 

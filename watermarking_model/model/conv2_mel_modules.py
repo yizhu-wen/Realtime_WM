@@ -68,6 +68,11 @@ class Encoder(nn.Module):
         self.hop_length = process_config["mel"]["hop_length"]
         self.win_length = process_config["mel"]["win_length"]
         self.sampling_rate = process_config["audio"]["or_sample_rate"]
+        self.smooth_chunks = train_config["optimize"]["smooth_chunks"]
+        self.dilate_chunks = train_config["optimize"]["dilate_chunks"]
+        self.target_smooth_ms = train_config["optimize"]["target_smooth_ms"]
+        self.target_dilate_ms = train_config["optimize"]["target_dilate_ms"]
+        self.tau = train_config["optimize"]["tau"]
         self.vad = load_silero_vad()
         self.vad_threshold = 0.50
         self.voice_prefilling = (

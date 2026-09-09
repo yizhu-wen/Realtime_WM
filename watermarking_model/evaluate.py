@@ -42,6 +42,7 @@ DISTORTIONS = [
     ("compression", 29, 0),
     ("noise_suppression", 28, 0),
     ("phone_call", 30, 0),
+    ("phone_call_legacy", 33, 0),
 ]
 
 
@@ -163,6 +164,11 @@ def main():
     ap.add_argument("-t", "--train_config", default="./config/train.yaml")
     ap.add_argument("--n_items", type=int, default=200, help="utterances per dataset")
     ap.add_argument(
+        "--libri_splits",
+        default="val,test",
+        help="LibriSpeech splits to score. 'val' is dev-clean in this layout.",
+    )
+    ap.add_argument(
         "--ljspeech", default="/data/yizwen/LJSpeech-1.1_wav", help="'' to skip"
     )
     args = ap.parse_args()
@@ -190,11 +196,13 @@ def main():
         + train_config["watermark"]["future_amt_second"] * sr
     )
 
-    datasets = {
-        "LibriSpeech-test": LibriTestDataset(
-            process_config, train_config, "test", limit=args.n_items
+    # In this dataset layout dev-clean lives in val/ (see dataset/move_flac_to_wav.py)
+    split_label = {"val": "LibriSpeech-dev", "test": "LibriSpeech-test"}
+    datasets = {}
+    for sp in [x.strip() for x in args.libri_splits.split(",") if x.strip()]:
+        datasets[split_label.get(sp, f"LibriSpeech-{sp}")] = LibriTestDataset(
+            process_config, train_config, sp, limit=args.n_items
         )
-    }
     if args.ljspeech:
         datasets["LJSpeech"] = FlatWavDataset(
             args.ljspeech, sr, min_samples, limit=args.n_items
@@ -211,19 +219,19 @@ def main():
     print("\n" + "=" * 74)
     print("Bit accuracy by distortion (batch size 1, no padding)")
     print("=" * 74)
-    header = f"{'distortion':<22}" + "".join(f"{n:>24}" for n in results)
+    header = f"{'distortion':<20}" + "".join(f"{n:>22}" for n in results)
     print(header)
     print("-" * len(header))
     for dname, _, _ in DISTORTIONS:
-        row = f"{dname:<22}"
+        row = f"{dname:<20}"
         for _, (acc, _, _) in results.items():
             a, n = acc[dname]
-            row += f"{a:>18.4f} ({n:>3})"
+            row += f"{a:>16.4f} ({n:>3})"
         print(row)
     print("-" * len(header))
-    row = f"{'SNR (dB)':<22}"
+    row = f"{'SNR (dB)':<20}"
     for _, (_, snr, _) in results.items():
-        row += f"{snr:>24.2f}"
+        row += f"{snr:>22.2f}"
     print(row)
 
 

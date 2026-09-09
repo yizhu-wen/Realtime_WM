@@ -548,6 +548,29 @@ class distortion(nn.Module):
         y_d = y_d.unsqueeze(1)
         return y_d
 
+    def benign_phone_distortion_legacy(
+        self, x: torch.Tensor, ratio, sample_rate: int = 16000
+    ):
+        """Pre-2026 phone channel: centred RIR and a 500-2000 Hz band.
+
+        `mode="same"` is not physically realisable -- it puts ~145 ms of
+        reverberation before the sound that caused it -- but checkpoints trained
+        against it decode it far better than the causal version, so it is kept
+        for in-distribution evaluation of those checkpoints.
+        """
+        x = x.squeeze(1)
+        rir = _get_phone_assets(sample_rate)[0].to(x.device)
+        noise = torch.randn_like(x)
+        rir_applied = fftconvolve(x, rir, mode="same")
+        snr_db = torch.randint(20, 26, (1,), device=x.device)
+        bg_added = add_noise(rir_applied, noise, snr_db)
+        y_d = julius.bandpass_filter(
+            bg_added,
+            cutoff_low=500 / sample_rate,
+            cutoff_high=2000 / sample_rate,
+        )
+        return y_d.unsqueeze(1)
+
     # ----- helper (optional) -----
     def _as_BT(self, x):  # [B,1,T] -> [B,T]
         return x.squeeze(1) if x.dim() == 3 else x
@@ -614,6 +637,7 @@ class distortion(nn.Module):
             30: lambda x: self.benign_phone_distortion(x, ratio),
             31: lambda x: self.low_pass_2k(x),  # Low Pass Filtering 2000 Hz
             32: lambda x: self.low_pass_4k(x),  # Low Pass Filtering 4000 Hz
+            33: lambda x: self.benign_phone_distortion_legacy(x, ratio),
         }
 
         x = x.clamp(-1, 1)

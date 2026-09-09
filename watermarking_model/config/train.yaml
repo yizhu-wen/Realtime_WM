@@ -25,6 +25,12 @@ optimize:
   eps: 0.000000001
   weight_decay: 0.0
   distortion: true          # RIR + noise + bandpass before decoding
+  # VAD mask shaping
+  smooth_chunks: null       # null => derive from target_smooth_ms
+  dilate_chunks: null       # null => derive from target_dilate_ms
+  target_smooth_ms: 40
+  target_dilate_ms: 15
+  tau: 0.15                 # softness of the VAD threshold
 
 iter:
   epoch: 50
