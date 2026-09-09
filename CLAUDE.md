@@ -175,6 +175,92 @@ removed in `e86ae20`). `Encoder(...)` constructed fine and only failed at
 `forward` with `AttributeError: 'Encoder' object has no attribute
 'smooth_chunks'`. All restored, plus `silero-vad` back in requirements.txt.
 
+## BASELINE: the training recipe behind the best checkpoint
+
+Starting point for further work. Checkpoint
+`MSE_loudness_split_frequency_adaptive_soft_vad_phone_distortion_ep_60_2025-10-24_12_08_46.pth.tar`,
+governing commit **`ccc9ab9`** (2025-10-18, the last before the checkpoint's
+timestamp).
+
+Provenance is confirmed, not guessed: the checkpoint's Adam state holds
+**209640 steps**, and 209640 / 60 epochs = 3494 = ceil(27952 / 8), where 27952
+is exactly the LibriSpeech train split after the >=3.0 s length filter. That
+also pins `delay + future = 1.0 s`, since any other pair changes the filter and
+hence the file count.
+
+### Data
+- LibriSpeech train, `/data/yizwen/LibriSpeech_wav/train`, 16 kHz mono
+- 27952 clips after the `2 s prefill + 0.5 delay + 0.5 future = 3.0 s` filter
+- `data_percentage: 1.0`, `data_divider: 1`
+- random crop when longer than `max_len` 176000: `randint(5 s, max_len)`
+- batch 8, zero-padded to the batch maximum by `collate_fn`
+- **no data augmentation**; `select_aug_mode`, `n_max_aug` and `aug.*` are inert
+
+### Framing
+- `n_fft 322`, `hop 160`, `win 322` -> 162 bins
+- `audio_prefilling 2.00 s` -> `voice_prefilling` 204 frames
+- `delay_amt_second 0.5` -> 51 frames; `future_amt_second 0.5` -> 50 frames
+- `offset_samples` 40480; message length 10 bits
+
+### Architecture
+- `conv2`, block `skip`, `layers_CE 3`, `layers_EM 4`, `hidden_dim 64`
+- encoder reads 204 frames, writes 51, with a 500 ms gap
+- **VAD gating ON** -- silero, threshold 0.50, `tau 0.15`,
+  `target_smooth_ms 40`, `target_dilate_ms 15`, smooth/dilate counts derived;
+  dynamic floor `[0.05, 0.20]` from frame RMS normalised by the utterance max
+- **`mask = stft_result != 0`** present (suppresses the watermark over padding)
+- discriminator ON (`adv: True`); **not saved** in this checkpoint
+
+### Decoder-side channel (`distortion: true`)
+Applied every step to the distorted head:
+1. RIR: torchaudio demo RIR, **`mode="same"`** (acausal, ~145 ms pre-echo)
+2. noise: `randn_like`, SNR `randint(20, 26)` dB
+3. bandpass **500-2000 Hz**, hardcoded in `Decoder.__init__` -- *not* the
+   `aug.cutoff_freq_*` config keys, which are inert
+
+### Optimisation
+- Adam `lr 1e-4`, `betas (0.9, 0.98)`, `eps 1e-9`, `weight_decay 0`
+- `StepLR(step_size 5000, gamma 0.98)` stepped once per epoch -> no decay in 60
+- grad clip `max_norm 1.0`, separately for encoder+decoder and discriminator
+- 60 epochs, checkpoint every 5
+
+### Loss
+`Loss_identity` = waveform MSE + message MSE (both decoder heads) +
+`TFLoudnessRatio(n_bands=16)`.
+
+- `lambda_e 1.0`, `lambda_b 1.0`, `lambda_a 0.01`
+- **`lambda_m` = 10 on step 1, then 0.01 for every step after.** The
+  `lambda_a = lambda_m = ...` line was present in the train, val *and* test
+  loops at `ccc9ab9`, so the effective message weight is 0.01.
+- `pre_step = 0`, so the warmup branch never fires
+
+### The open puzzle
+
+Effective `lambda_m = 0.01` produced this checkpoint (**+38 dB SNR, 0.98
+acc**) and also produced the September 2026 collapse (**+131 dB SNR, 0.50
+acc**, watermark below the 16-bit quantisation floor). Same weighting, opposite
+outcome.
+
+The difference is the VAD. Plausible mechanism, **not yet tested**: the VAD mask
+already suppresses the watermark in non-speech, so `TFLoudnessRatio` -- which is
+unbounded below and otherwise keeps paying the model to go quieter -- has much
+less left to push on, and the encoder can hold usable amplitude inside speech.
+Without the VAD the loudness term ran to zero amplitude unopposed.
+
+One epoch (~40 min) with VAD on vs off at `lambda_m` 0.01 would settle it, and
+it decides whether the VAD is perceptual polish or load-bearing.
+
+### Known defects present in this recipe
+
+Carried by the run that produced the checkpoint; all diagnosed later in this
+file:
+- discriminator stepped on gradients contaminated by `g_loss_adv`
+- acausal RIR (`mode="same"`)
+- dynamic floor normalised by the utterance-global RMS max (non-causal)
+- losses computed over batch padding; ~84% of the loudness softmax weight lands
+  on padding segments
+- the checkpoint omits the discriminator, so adversarial training cannot resume
+
 ## Evaluation
 
 `evaluate.py --ckpt <path> --n_items 200` scores a checkpoint on
