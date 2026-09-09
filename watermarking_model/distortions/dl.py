@@ -571,6 +571,21 @@ class distortion(nn.Module):
         )
         return y_d.unsqueeze(1)
 
+    def benign_phone_distortion_trainmatch(
+        self, x: torch.Tensor, ratio, sample_rate: int = 16000
+    ):
+        """Centred RIR + noise + 300-3400 Hz: the chain the current training
+        config applies, so this row is the in-distribution phone measurement."""
+        x = x.squeeze(1)
+        rir = _get_phone_assets(sample_rate)[0].to(x.device)
+        rir_applied = fftconvolve(x, rir, mode="same")
+        snr_db = torch.randint(20, 26, (1,), device=x.device)
+        bg_added = add_noise(rir_applied, torch.randn_like(x), snr_db)
+        y_d = julius.bandpass_filter(
+            bg_added, cutoff_low=300 / sample_rate, cutoff_high=3400 / sample_rate
+        )
+        return y_d.unsqueeze(1)
+
     # ----- helper (optional) -----
     def _as_BT(self, x):  # [B,1,T] -> [B,T]
         return x.squeeze(1) if x.dim() == 3 else x
@@ -638,6 +653,7 @@ class distortion(nn.Module):
             31: lambda x: self.low_pass_2k(x),  # Low Pass Filtering 2000 Hz
             32: lambda x: self.low_pass_4k(x),  # Low Pass Filtering 4000 Hz
             33: lambda x: self.benign_phone_distortion_legacy(x, ratio),
+            34: lambda x: self.benign_phone_distortion_trainmatch(x, ratio),
         }
 
         x = x.clamp(-1, 1)

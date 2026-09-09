@@ -43,6 +43,7 @@ DISTORTIONS = [
     ("noise_suppression", 28, 0),
     ("phone_call", 30, 0),
     ("phone_call_legacy", 33, 0),
+    ("phone_call_trainmatch", 34, 0),
 ]
 
 

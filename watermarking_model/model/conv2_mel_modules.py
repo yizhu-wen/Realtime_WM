@@ -374,7 +374,7 @@ class Decoder(nn.Module):
             # mode="full" truncated to the input length keeps the response
             # causal. mode="same" centres it, which put ~145 ms of
             # reverberation *before* the sound that caused it.
-            rir_applied = fftconvolve(y, rir, mode="full")[..., : y.shape[-1]]
+            rir_applied = fftconvolve(y, rir, mode="same")
             snr_db = torch.randint(20, 26, (1,), device=y.device)
             bg_added = add_noise(rir_applied, noise, snr_db)
 
