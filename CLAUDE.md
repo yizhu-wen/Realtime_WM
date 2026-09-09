@@ -128,10 +128,43 @@ The RIR mode is what decides it, not the band. On 80 test utterances:
 | 300-3400, `mode="same"` | 0.8899 |
 
 `mode="same"` shifts the output by half the RIR length (~145 ms) relative to
-`mode="full"`. The model handles the channel it saw and collapses to chance on
-the corrected one, so the decoder is highly sensitive to time alignment. Read
-0.92 as "robust to its training channel" and 0.48 as "does not transfer to a
-physically correct one" -- a retrain against the causal RIR would settle it.
+`mode="full"`. Read 0.92 as "robust to its training channel" and 0.48 as "does
+not transfer to a physically correct one".
+
+### The decoder matches a channel signature, it does not extract robustly
+
+A full factorial over the phone chain, 149 test utterances, 95% CI:
+
+| condition | acc |
+| --- | --- |
+| none | 0.9812 +/-0.0069 |
+| RIR+noise only, no band | 0.8698 +/-0.0171 |
+| **RIR+noise + bp 500-2000 (exact training channel)** | **0.9195 +/-0.0138** |
+| RIR+noise + bp 300-3400 | 0.8738 +/-0.0169 |
+| bp 500-2000 only (no RIR) | 0.6450 +/-0.0243 |
+| bp 300-3400 only (no RIR) | 0.7027 +/-0.0232 |
+
+Two results that cannot both come from signal content:
+
+1. **Adding a bandpass to RIR+noise raises accuracy**, 0.8698 -> 0.9195. A
+   filter can only discard information, so it can only help by making the input
+   look more like training data.
+2. **The better band flips with the RIR.** With the RIR, 500-2000 beats
+   300-3400 (0.9195 vs 0.8738). Without it, 300-3400 beats 500-2000 (0.7027 vs
+   0.6450) -- the physically expected direction. Non-overlapping CIs both ways.
+
+So the ~4.6 point drop when widening 500-2000 to 300-3400 is channel mismatch,
+not lost watermark. The decoder is tuned to the exact chain it trained on
+(centred RIR + noise + 500-2000). Removing the RIR alone costs 27 points
+(0.9195 -> 0.6450).
+
+Consistent with this: 92.5% of the watermark's energy sits below 300 Hz, which
+every one of these bands discards. Energy is not information, but the decoder
+is clearly not relying on the bulk of what the encoder emits.
+
+**Practical consequence:** `phone_call_legacy` = 0.92 is an in-distribution
+number and overstates real phone robustness. Training-channel diversity
+(randomised RIR, band edges and codecs) is what would make it mean something.
 
 ### Restoring VAD needed three pieces, not one
 
