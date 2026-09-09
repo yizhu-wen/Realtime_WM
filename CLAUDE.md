@@ -234,21 +234,38 @@ Applied every step to the distorted head:
   loops at `ccc9ab9`, so the effective message weight is 0.01.
 - `pre_step = 0`, so the warmup branch never fires
 
-### The open puzzle
+### Two chance epochs are normal warmup -- judge at epoch 3, not epoch 1
 
-Effective `lambda_m = 0.01` produced this checkpoint (**+38 dB SNR, 0.98
-acc**) and also produced the September 2026 collapse (**+131 dB SNR, 0.50
-acc**, watermark below the 16-bit quantisation floor). Same weighting, opposite
-outcome.
+The baseline run is `kcf7c7ol` on wandb (60 epochs, 63.3 h). Its own trajectory
+settles the puzzle: it *looks* collapsed for two epochs and then breaks out.
 
-The difference is the VAD. Plausible mechanism, **not yet tested**: the VAD mask
-already suppresses the watermark in non-speech, so `TFLoudnessRatio` -- which is
-unbounded below and otherwise keeps paying the model to go quieter -- has much
-less left to push on, and the encoder can hold usable amplitude inside speech.
-Without the VAD the loudness term ran to zero amplitude unopposed.
+| epoch | baseline `kcf7c7ol` | collapsed `oljqa8wp` |
+| --- | --- | --- |
+| 1 | 66.53 dB, acc 0.5015 | 70.55 dB, acc 0.4996 |
+| 2 | 61.14 dB, acc 0.4953 | 84.77 dB, acc 0.4977 |
+| 3 | **40.40 dB, acc 0.6767/0.9034** | 91.21 dB, acc 0.5027 |
+| 10 | 39.26 dB, acc 0.8191/0.8848 | 104.14 dB, acc 0.4958 |
+| 60/50 | 38.73 dB, acc 0.8815/0.9288 | 131.84 dB, acc 0.4989 |
 
-One epoch (~40 min) with VAD on vs off at `lambda_m` 0.01 would settle it, and
-it decides whether the VAD is perceptual polish or load-bearing.
+**Falling val SNR over epochs 1-3 means it is breaking out; rising means it is
+diverging.** An earlier note here claimed epoch 1 alone diagnosed the collapse.
+That was wrong -- epoch 1 is indistinguishable between the two.
+
+**The VAD is not the explanation either.** Tested 2026-09-09: with the VAD
+restored at `lambda_m` 0.01, epoch 1 gave SNR 69.93 / acc 0.5014, matching the
+VAD-less collapse. So the hypothesis that the VAD was load-bearing against
+`TFLoudnessRatio` is disproved.
+
+What actually differs between `kcf7c7ol` and `oljqa8wp` is therefore still
+open, and the candidates are the remaining recipe deltas: the 500-2000 vs
+300-3400 decoder band, the `stft_result != 0` mask, and the discriminator
+gradient fix.
+
+Also note the baseline's *own* numbers are more modest than the checkpoint
+evaluation suggests: val acc 0.8815/0.9288 at epoch 60, against 0.98 measured
+by `evaluate.py` on 200 dev utterances. Different message draws and a
+200-utterance prefix, so not contradictory, but do not quote 0.98 as the
+training-time figure.
 
 ### Known defects present in this recipe
 
