@@ -35,6 +35,6 @@ iter:
 wandb:
   enabled: true
   project: "real-time-voice-watermark"
-  name: "novad_50ep_lm10-lb1_delay0.5_future0.5_causalRIR"
+  name: "novad_50ep_lmeff0.01_band300-3400_causalRIR"
   # API key is read from the WANDB_API_KEY environment variable.
   # Do not commit a key here.

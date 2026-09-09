@@ -330,3 +330,4 @@ wandb_api.txt
 ### Training run artifacts (keep on disk, not in git)
 watermarking_model/results/ckpt/pth/none-conv2_*.pth.tar
 watermarking_model/results/log/
+watermarking_model/results/samples/
