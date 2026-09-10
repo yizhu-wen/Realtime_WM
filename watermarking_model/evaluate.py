@@ -10,6 +10,7 @@ that do not exist at inference on a single utterance.
 
 import argparse
 import glob
+import random
 import os
 import sys
 import warnings
@@ -55,9 +56,13 @@ class FlatWavDataset(torch.utils.data.Dataset):
     LibriSpeech train/val/test layout WavDataset expects.
     """
 
-    def __init__(self, root, target_sr, min_samples, limit=None):
+    def __init__(self, root, target_sr, min_samples, limit=None, seed=0):
         self.target_sr = target_sr
         files = sorted(glob.glob(os.path.join(root, "**", "*.wav"), recursive=True))
+        # Sample across the corpus rather than taking a sequential prefix; the
+        # first N files of LJSpeech are one contiguous block of recordings.
+        if limit:
+            random.Random(seed).shuffle(files)
         self.files = []
         for f in files:
             try:
@@ -69,6 +74,7 @@ class FlatWavDataset(torch.utils.data.Dataset):
                 self.files.append(f)
             if limit and len(self.files) >= limit:
                 break
+        self.files.sort()
         self._resamplers = {}
 
     def __len__(self):
