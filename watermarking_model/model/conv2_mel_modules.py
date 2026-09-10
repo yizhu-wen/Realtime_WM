@@ -299,23 +299,23 @@ class Decoder(nn.Module):
     def forward(self, y, global_step=1):
         y_identity = y
         if self.distortion:
-            # Band-limit first, then apply the telephony channel (room
-            # response + background noise) on top of the band-limited signal.
-            banded = julius.bandpass_filter(
-                y,
-                cutoff_low=self.cutoff_freq_low / self.original_sample_rate,
-                cutoff_high=self.cutoff_freq_high / self.original_sample_rate,
-            )
-
+            # Telephony channel, baseline order: room response, then
+            # background noise, then band-limiting.
             rir = _get_rir(self.original_sample_rate).to(y.device)
             # mode="same" is centred, so this is acausal: ~145 ms of
             # reverberation lands before the sound that caused it, and the
             # signal shifts by the same amount. Kept deliberately to match the
             # recipe behind the best checkpoint; mode="full" truncated to
             # y.shape[-1] is the physically correct alternative.
-            rir_applied = fftconvolve(banded, rir, mode="same")
+            rir_applied = fftconvolve(y, rir, mode="same")
             snr_db = torch.randint(20, 26, (1,), device=y.device)
-            y_d = add_noise(rir_applied, torch.randn_like(y), snr_db)
+            bg_added = add_noise(rir_applied, torch.randn_like(y), snr_db)
+
+            y_d = julius.bandpass_filter(
+                bg_added,
+                cutoff_low=self.cutoff_freq_low / self.original_sample_rate,
+                cutoff_high=self.cutoff_freq_high / self.original_sample_rate,
+            )
 
         else:
             y_d = y
