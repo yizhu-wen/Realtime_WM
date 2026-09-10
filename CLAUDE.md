@@ -278,6 +278,50 @@ file:
   on padding segments
 - the checkpoint omits the discriminator, so adversarial training cannot resume
 
+## Settled: the encoder VAD gate is what makes lambda_m 0.01 trainable
+
+Five full-dataset runs, same effective `lambda_m` of 0.01 throughout. Val SNR
+at epochs 1-3:
+
+| run | VAD placement | band | RIR | ep1 | ep2 | ep3 | outcome |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `kcf7c7ol` baseline | encoder, adaptive soft | 500-2000 | same | 66.53 | 61.14 v | 40.40 | **works** 38.7 dB, 0.88/0.93 |
+| `oljqa8wp` | none | 500-2000 | causal | 70.55 | 84.77 ^ | 91.21 | collapsed, 131 dB |
+| `hhqkp4ee` | encoder, adaptive soft | 300-3400 | same | 69.93 | 41.58 v | 40.35 | **works**, killed ep24 at 0.91/0.999 |
+| `y76dzghh` | channel, after bandpass | 300-3400 | same | 70.67 | 85.95 ^ | 93.98 | collapsed |
+| `g8sau4cz` | none | 300-3400 | same | 65.92 | 86.39 ^ | 96.27 | collapsed |
+
+**Encoder VAD present -> converged 2/2. Absent -> collapsed 3/3.** Band
+(500-2000 vs 300-3400) and RIR mode (same vs causal) both vary *within* each
+group, so neither explains the split.
+
+Mechanism: the encoder gate zeroes the watermark in non-speech, so
+`TFLoudnessRatio` -- unbounded below, and otherwise paying the model
+indefinitely to get quieter -- has little left to push against. Remove the gate
+and the encoder embeds everywhere, the loudness term runs unopposed, and at
+`lambda_m` 0.01 the message term cannot hold amplitude up. A VAD placed in the
+channel does **not** substitute: it gates the received signal after the fact
+and leaves the encoder free to embed in silence.
+
+Diagnose at epoch 3, roughly 2 h. Epoch 1 is worthless -- `g8sau4cz` had the
+most baseline-like epoch 1 of any run (65.92 vs the baseline's 66.53) and still
+collapsed.
+
+### Untested gap worth trying first
+
+The **plain hard 0.5 VAD in the encoder** (commit `43b3d96`: encoder gate,
+RIR -> noise -> bandpass, 300-3400) was committed and smoke-tested but never
+trained. Every trained run used either the *adaptive soft* gate in the encoder
+or no encoder gate at all. `git revert 0a0439a cb9e688` restores it.
+
+### The other lever
+
+`lambda_m` cannot currently be set: `train.py:332`
+`lambda_a = lambda_m = train_config["optimize"]["lambda_a"]` pins it to 0.01
+every step, so `config/train.yaml`'s `lambda_m: 10.` is inert. Removing that
+line and setting `lambda_m` explicitly is required to test anything in the
+0.01-10 bracket, where 0.01 collapses without a gate and 10 gave -8.9 dB.
+
 ## Evaluation
 
 `evaluate.py --ckpt <path> --n_items 200` scores a checkpoint on
