@@ -68,8 +68,6 @@ class Encoder(nn.Module):
         self.hop_length = process_config["mel"]["hop_length"]
         self.win_length = process_config["mel"]["win_length"]
         self.sampling_rate = process_config["audio"]["or_sample_rate"]
-        self.vad = load_silero_vad()
-        self.vad_threshold = 0.50
         self.voice_prefilling = (
             int(
                 (
@@ -239,27 +237,7 @@ class Encoder(nn.Module):
             y = self.stft.inverse(spect, phase).squeeze(1)
             del spect, phase, real_part, imag_part, all_watermark_stft
 
-            with torch.no_grad():
-                # Chunk-level speech probabilities, [B, C]
-                batch_chunk_probs = self.vad.audio_forward(x, sr=self.sampling_rate)
-            p = batch_chunk_probs.to(device=y.device, dtype=y.dtype)
-
-            # Plain silero VAD: hard threshold at 0.5, no soft step, no
-            # smoothing/dilation, no amplitude-driven floor. silero emits one
-            # probability per 512-sample chunk, so the mask expands by 512.
-            chunk_mask = (p > self.vad_threshold).to(y.dtype)  # [B, C]
-            sample_masks = torch.repeat_interleave(chunk_mask, 512, dim=1)
-            # the last chunk is zero-padded by silero, so trim to the audio
-            if sample_masks.shape[-1] < self.stft.num_samples:
-                sample_masks = F.pad(
-                    sample_masks,
-                    (0, self.stft.num_samples - sample_masks.shape[-1]),
-                )
-            sample_masks = sample_masks[:, : self.stft.num_samples]
-
-            masked_y = y * sample_masks
-
-            return masked_y, zeros_right.shape[-1]
+            return y, zeros_right.shape[-1]
         else:
             print("Not enough watermarking!!!!")
             return None
@@ -277,6 +255,11 @@ class Decoder(nn.Module):
         self.win_dim = int((process_config["mel"]["n_fft"] / 2) + 1)
         self.hop_length = process_config["mel"]["hop_length"]
         self.distortion = train_config["optimize"]["distortion"]
+        # VAD is the last stage of the telephony chain, applied to the
+        # received signal after band-limiting -- not an encoder-side gate
+        # on where the watermark is placed.
+        self.vad = load_silero_vad()
+        self.vad_threshold = 0.50
         self.cutoff_freq_low = 300
         self.cutoff_freq_high = 3400
         self.block = model_config["conv2"]["block"]
@@ -311,11 +294,25 @@ class Decoder(nn.Module):
             snr_db = torch.randint(20, 26, (1,), device=y.device)
             bg_added = add_noise(rir_applied, torch.randn_like(y), snr_db)
 
-            y_d = julius.bandpass_filter(
+            banded = julius.bandpass_filter(
                 bg_added,
                 cutoff_low=self.cutoff_freq_low / self.original_sample_rate,
                 cutoff_high=self.cutoff_freq_high / self.original_sample_rate,
             )
+
+            # 4. VAD gate on the band-limited signal. silero emits one
+            # probability per 512-sample chunk; hard threshold at 0.5.
+            with torch.no_grad():
+                probs = self.vad.audio_forward(
+                    banded.detach(), sr=self.original_sample_rate
+                )
+            p = probs.to(device=banded.device, dtype=banded.dtype)
+            chunk_mask = (p > self.vad_threshold).to(banded.dtype)
+            sample_masks = torch.repeat_interleave(chunk_mask, 512, dim=1)
+            T = banded.shape[-1]
+            if sample_masks.shape[-1] < T:
+                sample_masks = F.pad(sample_masks, (0, T - sample_masks.shape[-1]))
+            y_d = banded * sample_masks[:, :T]
 
         else:
             y_d = y
