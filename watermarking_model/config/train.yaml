@@ -27,7 +27,7 @@ optimize:
   distortion: true          # RIR + noise + bandpass before decoding
 
 iter:
-  epoch: 50
+  epoch: 20
   save_circle: 5      # checkpoint every N epochs
   show_circle: 1000   # log every N steps
   data_divider: 1     # train on 1/N of the data
@@ -35,6 +35,6 @@ iter:
 wandb:
   enabled: true
   project: "real-time-voice-watermark"
-  name: "vad_50ep_lmeff0.01_band300-3400_sameRIR"
+  name: "vadInChannel_20ep_lmeff0.01_band300-3400_sameRIR"
   # API key is read from the WANDB_API_KEY environment variable.
   # Do not commit a key here.
