@@ -370,10 +370,11 @@ class Decoder(nn.Module):
             # Load the demo RIR and resample to sample_rate
             rir = _get_rir(self.original_sample_rate).to(y.device)
             noise = torch.randn_like(y)
-            # Apply RIR
-            # mode="full" truncated to the input length keeps the response
-            # causal. mode="same" centres it, which put ~145 ms of
-            # reverberation *before* the sound that caused it.
+            # Apply RIR. mode="same" is centred, so this is acausal: it puts
+            # ~145 ms of reverberation before the sound that caused it, and
+            # shifts the signal by the same amount. Kept deliberately to match
+            # the recipe behind the best checkpoint; mode="full" truncated to
+            # y.shape[-1] is the physically correct alternative.
             rir_applied = fftconvolve(y, rir, mode="same")
             snr_db = torch.randint(20, 26, (1,), device=y.device)
             bg_added = add_noise(rir_applied, noise, snr_db)
