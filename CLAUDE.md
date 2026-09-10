@@ -322,7 +322,32 @@ Diagnose at epoch 3, roughly 2 h. Epoch 1 is worthless -- `g8sau4cz` had the
 most baseline-like epoch 1 of any run (65.92 vs the baseline's 66.53) and still
 collapsed.
 
-### Untested gap worth trying first
+### Answered: a plain hard gate is enough (2026-09-10)
+
+`rohklsax` (`plainVAD_20ep_lmeff0.01_band300-3400_sameRIR`) trained the
+configuration that had been committed but never run: silero's raw `p > 0.5`
+decision as a hard 0/1 mask, no sigmoid/tau, no smoothing, no dilation, no RMS
+dynamic floor. Everything else matched `hhqkp4ee`.
+
+| epoch | plain gate | baseline (adaptive soft) |
+| --- | --- | --- |
+| 1 | 58.02, acc 0.502 | 66.53, acc 0.502 |
+| 2 | 60.70, acc 0.496 | 61.14, acc 0.495 |
+| 3 | 56.89, acc 0.500 | **40.40, acc 0.677/0.903** |
+| 4 | **40.22, acc 0.690/0.874** | 40.37, acc 0.747/0.912 |
+
+It breaks out one epoch later and lands on the same operating point. So the
+**presence** of an encoder gate is what matters; the adaptive machinery is
+perceptual refinement, not what makes training viable at `lambda_m` 0.01.
+
+**Warning about the epoch-3 test.** A hardcoded `SNR < 55` threshold labelled
+this run "DIVERGING" at epoch 3 (56.89 dB), which was wrong -- SNR had *fallen*
+from 60.70 and was nowhere near the 91-96 dB of the real collapses. Acting on
+that label would have killed a working run. Use the direction of SNR plus
+whether `msg_loss` has moved off 2.0, not a single threshold, and give a slow
+run until epoch 5 before judging.
+
+### Previously untested gap (now closed by the above)
 
 The **plain hard 0.5 VAD in the encoder** (commit `43b3d96`: encoder gate,
 RIR -> noise -> bandpass, 300-3400) was committed and smoke-tested but never
