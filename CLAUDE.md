@@ -295,13 +295,28 @@ at epochs 1-3:
 (500-2000 vs 300-3400) and RIR mode (same vs causal) both vary *within* each
 group, so neither explains the split.
 
-Mechanism: the encoder gate zeroes the watermark in non-speech, so
-`TFLoudnessRatio` -- unbounded below, and otherwise paying the model
-indefinitely to get quieter -- has little left to push against. Remove the gate
-and the encoder embeds everywhere, the loudness term runs unopposed, and at
-`lambda_m` 0.01 the message term cannot hold amplitude up. A VAD placed in the
-channel does **not** substitute: it gates the received signal after the fact
-and leaves the encoder free to embed in silence.
+**The mechanism is NOT established.** An earlier version of this note asserted
+that the encoder gate relieves pressure from `TFLoudnessRatio`. Three probes
+were run on 2026-09-10 and none support it:
+
+| probe | result |
+| --- | --- |
+| where the loudness loss puts its softmax weight | consistent: silence takes 97.9% without the gate (l_ratio +1.36 dB) vs 0% with it |
+| per-term gradient norm on encoder params | **contradicts**: loudness dominates in both (96.6% vs 98.0%) and is *larger* with the gate, loud/msg 247x vs 359x |
+| watermark RMS after 60 steps of the real loss | **contradicts**: shrinks 0.204x without the gate, 0.224x with it -- no difference |
+
+Caveat: 60 steps is ~1.7% of an epoch and the trajectories separate around
+epoch 2-3 (~7000-10000 steps), so these probes may simply not reach the regime
+where it happens. They refute the stated mechanism at initialisation; they do
+not rule out one that emerges later.
+
+One lead, not an answer: with the gate the loudness loss goes negative and
+stays there (-0.0034, stable); without it, it oscillates positive (+0.0129).
+The gated model settles into a configuration that satisfies the loudness term
+and the ungated one does not.
+
+To resolve it properly, log per-term gradient norms and watermark RMS every N
+steps through the first three epochs of both configs.
 
 Diagnose at epoch 3, roughly 2 h. Epoch 1 is worthless -- `g8sau4cz` had the
 most baseline-like epoch 1 of any run (65.92 vs the baseline's 66.53) and still
