@@ -11,7 +11,6 @@ from .blocks import (
 from distortions.frequency import TacotronSTFT, fixed_STFT
 import julius
 import torch.nn.functional as F
-from silero_vad import load_silero_vad
 from torchaudio.functional import resample as tf_resample
 from torchaudio.functional import (
     fftconvolve,
@@ -255,11 +254,6 @@ class Decoder(nn.Module):
         self.win_dim = int((process_config["mel"]["n_fft"] / 2) + 1)
         self.hop_length = process_config["mel"]["hop_length"]
         self.distortion = train_config["optimize"]["distortion"]
-        # VAD is the last stage of the telephony chain, applied to the
-        # received signal after band-limiting -- not an encoder-side gate
-        # on where the watermark is placed.
-        self.vad = load_silero_vad()
-        self.vad_threshold = 0.50
         self.cutoff_freq_low = 300
         self.cutoff_freq_high = 3400
         self.block = model_config["conv2"]["block"]
@@ -294,25 +288,11 @@ class Decoder(nn.Module):
             snr_db = torch.randint(20, 26, (1,), device=y.device)
             bg_added = add_noise(rir_applied, torch.randn_like(y), snr_db)
 
-            banded = julius.bandpass_filter(
+            y_d = julius.bandpass_filter(
                 bg_added,
                 cutoff_low=self.cutoff_freq_low / self.original_sample_rate,
                 cutoff_high=self.cutoff_freq_high / self.original_sample_rate,
             )
-
-            # 4. VAD gate on the band-limited signal. silero emits one
-            # probability per 512-sample chunk; hard threshold at 0.5.
-            with torch.no_grad():
-                probs = self.vad.audio_forward(
-                    banded.detach(), sr=self.original_sample_rate
-                )
-            p = probs.to(device=banded.device, dtype=banded.dtype)
-            chunk_mask = (p > self.vad_threshold).to(banded.dtype)
-            sample_masks = torch.repeat_interleave(chunk_mask, 512, dim=1)
-            T = banded.shape[-1]
-            if sample_masks.shape[-1] < T:
-                sample_masks = F.pad(sample_masks, (0, T - sample_masks.shape[-1]))
-            y_d = banded * sample_masks[:, :T]
 
         else:
             y_d = y
