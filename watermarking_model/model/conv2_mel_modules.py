@@ -11,7 +11,6 @@ from .blocks import (
 from distortions.frequency import TacotronSTFT, fixed_STFT
 import julius
 import torch.nn.functional as F
-from silero_vad import load_silero_vad
 from torchaudio.functional import resample as tf_resample
 from torchaudio.functional import (
     fftconvolve,
@@ -68,8 +67,6 @@ class Encoder(nn.Module):
         self.hop_length = process_config["mel"]["hop_length"]
         self.win_length = process_config["mel"]["win_length"]
         self.sampling_rate = process_config["audio"]["or_sample_rate"]
-        self.vad = load_silero_vad()
-        self.vad_threshold = 0.50
         self.voice_prefilling = (
             int(
                 (
@@ -239,27 +236,7 @@ class Encoder(nn.Module):
             y = self.stft.inverse(spect, phase).squeeze(1)
             del spect, phase, real_part, imag_part, all_watermark_stft
 
-            with torch.no_grad():
-                # Chunk-level speech probabilities, [B, C]
-                batch_chunk_probs = self.vad.audio_forward(x, sr=self.sampling_rate)
-            p = batch_chunk_probs.to(device=y.device, dtype=y.dtype)
-
-            # Plain silero VAD: hard threshold at 0.5, no soft step, no
-            # smoothing/dilation, no amplitude-driven floor. silero emits one
-            # probability per 512-sample chunk, so the mask expands by 512.
-            chunk_mask = (p > self.vad_threshold).to(y.dtype)  # [B, C]
-            sample_masks = torch.repeat_interleave(chunk_mask, 512, dim=1)
-            # the last chunk is zero-padded by silero, so trim to the audio
-            if sample_masks.shape[-1] < self.stft.num_samples:
-                sample_masks = F.pad(
-                    sample_masks,
-                    (0, self.stft.num_samples - sample_masks.shape[-1]),
-                )
-            sample_masks = sample_masks[:, : self.stft.num_samples]
-
-            masked_y = y * sample_masks
-
-            return masked_y, zeros_right.shape[-1]
+            return y, zeros_right.shape[-1]
         else:
             print("Not enough watermarking!!!!")
             return None
