@@ -41,6 +41,6 @@ iter:
 wandb:
   enabled: true
   project: "real-time-voice-watermark"
-  name: "noVAD_20ep_rerun_lmeff0.01_band300-3400_sameRIR"
+  name: "softVADinChannel_20ep_lmeff0.01_band300-3400_sameRIR"
   # API key is read from the WANDB_API_KEY environment variable.
   # Do not commit a key here.
