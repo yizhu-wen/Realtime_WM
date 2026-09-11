@@ -362,6 +362,50 @@ every step, so `config/train.yaml`'s `lambda_m: 10.` is inert. Removing that
 line and setting `lambda_m` explicitly is required to test anything in the
 0.01-10 bracket, where 0.01 collapses without a gate and 10 gave -8.9 dB.
 
+## BEST MODEL: plainVAD ep20 (`rohklsax`, 2026-09-11)
+
+`results/ckpt/pth/none-conv2_ep_20_*.pth.tar` from run `rohklsax`. Plain hard
+0.5 encoder gate, telephony chain RIR(same) -> noise(20-26 dB) ->
+bandpass(300-3400), effective `lambda_m` 0.01, 20 epochs.
+
+Best of the session on almost every axis. LibriSpeech-test, batch size 1:
+
+| distortion | plainVAD ep20 | adaptive ep20 | baseline ep60 |
+| --- | --- | --- | --- |
+| none | **0.9784** | 0.9307 | 0.9809 |
+| resample_8k | **0.9302** | 0.9332 | 0.6849 |
+| gaussian_noise_20 | **0.5940** | 0.5769 | 0.5648 |
+| median_filter | **0.9472** | 0.8593 | 0.8925 |
+| low_pass_2k | 0.7432 | 0.7603 | 0.6869 |
+| low_pass_4k | **0.9377** | 0.9221 | 0.7327 |
+| high_pass_500 | 0.9683 | 0.9256 | 0.9789 |
+| reencode | 0.9784 | 0.9307 | 0.9809 |
+| compression | **0.9709** | 0.8648 | 0.8925 |
+| noise_suppression | **0.9417** | 0.8839 | 0.9302 |
+| phone_call (causal) | 0.5643 | 0.5714 | 0.4784 |
+| phone_call_legacy | 0.6749 | 0.7352 | 0.9291 |
+| phone_call_trainmatch | **0.9302** | 0.9030 | 0.8889 |
+| SNR dB | 38.30 | 41.13 | 37.07 |
+
+LJSpeech tracks it: 0.9910 clean at 40.80 dB, and LibriSpeech-dev 0.9835 at
+38.97 dB.
+
+Against the **adaptive gate at the same 20 epochs and same band** -- the clean
+single-variable comparison -- the plain gate is +5.8 points on average across
+non-band-limiting channels (clean +4.8, compression +10.6, median +8.8,
+noise-suppression +5.8) and level on band-limiting (-0.2). It gives up 2.8 dB
+of SNR.
+
+Against the **ep-60 baseline**, it is +16.9 points on band-limiting channels
+(resample_8k +24.5, low_pass_4k +20.5) at +1.2 dB better SNR, in a third of the
+epochs. `phone_call_legacy` -25.4 is not a regression: that is the baseline's
+own 500-2000 training channel. On each model's own channel,
+`phone_call_trainmatch` 0.9302 vs the baseline's `phone_call_legacy` 0.9291.
+
+Still weak: Gaussian noise (~0.59) and the causal `phone_call` (~0.56). The
+first is inherent to a watermark ~38 dB below the speech; the second is the
+acausal-RIR mismatch, since training uses `mode="same"`.
+
 ## Evaluation
 
 `evaluate.py --ckpt <path> --n_items 200` scores a checkpoint on
