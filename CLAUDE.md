@@ -291,9 +291,32 @@ at epochs 1-3:
 | `y76dzghh` | channel, after bandpass | 300-3400 | same | 70.67 | 85.95 ^ | 93.98 | collapsed |
 | `g8sau4cz` | none | 300-3400 | same | 65.92 | 86.39 ^ | 96.27 | collapsed |
 
-**Encoder VAD present -> converged 2/2. Absent -> collapsed 3/3.** Band
+**Encoder VAD present -> converged 2/2. Absent -> collapsed 5/5.** Band
 (500-2000 vs 300-3400) and RIR mode (same vs causal) both vary *within* each
 group, so neither explains the split.
+
+Two later runs extend this (2026-09-11):
+
+| run | VAD placement | ep2 | ep3 | outcome |
+| --- | --- | --- | --- | --- |
+| `pm7dkl4u` | none (rerun of `g8sau4cz`) | 85.47 | 97.48 | collapsed -- reproduces to ~1 dB |
+| `ns4an8k8` | **adaptive soft**, channel after bandpass | 87.27 | 92.86 | collapsed |
+
+`ns4an8k8` is the decisive one. The channel-side gate has now been tested with
+**both** forms -- plain hard (`y76dzghh`) and adaptive soft (`ns4an8k8`) -- and
+both collapse, while the same two gate forms in the *encoder* both converge
+(`kcf7c7ol`/`hhqkp4ee` adaptive, `rohklsax` plain). So what matters is **where**
+the gate sits, not what shape it has:
+
+|  | encoder | channel |
+| --- | --- | --- |
+| adaptive soft | converged | **collapsed** |
+| plain hard | converged | **collapsed** |
+
+The gate has to constrain *what gets embedded*, not *what gets received*. A
+channel-side mask leaves the encoder free to embed in silence, and the soft
+mask's 0.05 floor -- which attenuates rather than removes, keeping gradients
+flowing everywhere -- does not rescue it.
 
 **The mechanism is NOT established.** An earlier version of this note asserted
 that the encoder gate relieves pressure from `TFLoudnessRatio`. Three probes
