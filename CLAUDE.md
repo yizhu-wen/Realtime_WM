@@ -318,6 +318,14 @@ channel-side mask leaves the encoder free to embed in silence, and the soft
 mask's 0.05 floor -- which attenuates rather than removes, keeping gradients
 flowing everywhere -- does not rescue it.
 
+`ns4an8k8` ran to 20 epochs and its evaluation is the reference "fully
+degenerate" row: **every distortion returns the identical accuracy** (dev
+0.5075, test 0.5156, LJSpeech 0.5100) at SNR ~113 dB. Identical rather than
+merely chance-level means the decoder output does not depend on its input at
+all -- it emits a constant, and the figure is just chance agreement with the
+random message. Useful as a sanity check: if a future evaluation shows the same
+number in all 13 rows, the model is dead, not weak.
+
 **The mechanism is NOT established.** An earlier version of this note asserted
 that the encoder gate relieves pressure from `TFLoudnessRatio`. Three probes
 were run on 2026-09-10 and none support it:
