@@ -291,9 +291,33 @@ at epochs 1-3:
 | `y76dzghh` | channel, after bandpass | 300-3400 | same | 70.67 | 85.95 ^ | 93.98 | collapsed |
 | `g8sau4cz` | none | 300-3400 | same | 65.92 | 86.39 ^ | 96.27 | collapsed |
 
-**Encoder VAD present -> converged 2/2. Absent -> collapsed 5/5.** Band
+**At `lambda_m` 0.01: encoder VAD present -> converged 3/3 (`kcf7c7ol`,
+`hhqkp4ee`, `rohklsax`). Absent or channel-side -> collapsed 5/5.** Band
 (500-2000 vs 300-3400) and RIR mode (same vs causal) both vary *within* each
 group, so neither explains the split.
+
+**The `lambda_m` 0.01 scope is essential -- the VAD is not required to learn.**
+Three runs with no VAD at all learned the message perfectly well at
+`lambda_m` 10; they just produced an audible watermark:
+
+| run | VAD | lambda_m | SNR dB | acc |
+| --- | --- | --- | --- | --- |
+| `wgr5miqz` | none | 10 | **-3.46** | 0.9289/0.9687 |
+| `7fm0oqki` | none | 10 | **-4.23** | 0.9490/0.9835 |
+| `b6hzmqft` | none | 10 | **-8.86** | 0.9774/0.9584 |
+
+So the two knobs trade against each other, and the real statement is about
+*which combinations give accuracy **and** inaudibility*:
+
+| | `lambda_m` 0.01 | `lambda_m` 10 |
+| --- | --- | --- |
+| encoder VAD | **works: ~0.9 acc at +38 to +41 dB** | untested |
+| no VAD | collapses to a zero watermark | learns, but -3 to -9 dB (audible) |
+| channel VAD | collapses | untested |
+
+Only 3 of 11 full runs are both accurate and inaudible, and all three have an
+encoder-side gate at `lambda_m` 0.01. The top-right and bottom-right cells have
+never been run.
 
 Two later runs extend this (2026-09-11):
 
