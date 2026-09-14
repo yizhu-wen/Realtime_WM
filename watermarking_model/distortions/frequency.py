@@ -445,7 +445,9 @@ class STFT(torch.nn.Module):
     
     
 def _mel_to_linear_matrix(sr, n_fft, n_mels, mel_fmin, mel_fmax):
-    m = librosa.filters.mel(sr, n_fft, n_mels, mel_fmin, mel_fmax)
+    # librosa >=0.10 made every argument after `sr` keyword-only.
+    m = librosa.filters.mel(sr=sr, n_fft=n_fft, n_mels=n_mels,
+                            fmin=mel_fmin, fmax=mel_fmax)
     m_t = np.transpose(m)
     p = np.matmul(m, m_t)
     d = [1.0 / x if np.abs(x) > 1.0e-8 else x for x in np.sum(p, axis=0)]
@@ -461,7 +463,8 @@ class TacotronSTFT(torch.nn.Module):
         self.sampling_rate = sampling_rate
         self.stft_fn = STFT(filter_length, hop_length, win_length)
         mel_basis = librosa_mel_fn(
-            sampling_rate, filter_length, n_mel_channels, mel_fmin, mel_fmax)
+            sr=sampling_rate, n_fft=filter_length, n_mels=n_mel_channels,
+            fmin=mel_fmin, fmax=mel_fmax)
         mel_basis = torch.from_numpy(mel_basis).float()
         self.register_buffer('mel_basis', mel_basis) # 
         # mel_to_linear_basis = _mel_to_linear_matrix(sampling_rate, filter_length, n_mel_channels, mel_fmin, mel_fmax)

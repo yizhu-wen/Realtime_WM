@@ -1,3 +1,4 @@
+import os
 import torch
 import random
 import torch.nn as nn
@@ -24,17 +25,33 @@ def _get_phone_assets(target_sr: int) -> Tuple[torch.Tensor, torch.Tensor]:
     if target_sr in _PHONE_CACHE:
         return _PHONE_CACHE[target_sr]
 
-    try:
-        from torchaudio.utils import download_asset
+    def _asset(rel):
+        """torchaudio >=2.9 dropped download_asset and load; fall back to the
+        file the hub cache already holds, read with soundfile."""
+        cached = os.path.expanduser(f"~/.cache/torch/hub/torchaudio/{rel}")
+        try:
+            from torchaudio.utils import download_asset
 
-        SAMPLE_RIR = download_asset(
+            path = download_asset(rel)
+        except Exception:
+            if not os.path.exists(cached):
+                raise RuntimeError(f"asset {rel} not downloadable and not cached")
+            path = cached
+        try:
+            return torchaudio.load(path)
+        except Exception:
+            import soundfile as sf
+
+            a, sr = sf.read(path, dtype="float32", always_2d=True)
+            return torch.from_numpy(a.T.copy()), sr
+
+    try:
+        rir_raw, rir_sr = _asset(
             "tutorial-assets/Lab41-SRI-VOiCES-rm1-impulse-mc01-stu-clo-8000hz.wav"
         )
-        SAMPLE_NOISE = download_asset(
+        noise_raw, noise_sr = _asset(
             "tutorial-assets/Lab41-SRI-VOiCES-rm1-babb-mc01-stu-clo-8000hz.wav"
         )
-        rir_raw, rir_sr = torchaudio.load(SAMPLE_RIR)
-        noise_raw, noise_sr = torchaudio.load(SAMPLE_NOISE)
     except Exception as e:
         raise RuntimeError(f"failed to load phone assets: {e}")
 
