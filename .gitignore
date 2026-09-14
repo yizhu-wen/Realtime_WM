@@ -331,3 +331,4 @@ wandb_api.txt
 watermarking_model/results/ckpt/pth/none-conv2_*.pth.tar
 watermarking_model/results/log/
 watermarking_model/results/samples/
+watermarking_model/results/evals/
