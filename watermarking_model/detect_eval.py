@@ -226,10 +226,14 @@ def main():
     assert m.sr == sr, (m.sr, sr)
     dev = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    # RT-SW needs 2 s prefill + delay + future; the others just need a clip
+    # Every method is scored on the same clips, so the minimum duration is
+    # RT-SW's for all of them: it needs 2 s of prefill plus the delay and the
+    # lookahead, where the baselines would accept anything over a second.
+    # Filtering per method would hand the baselines 400 extra short LibriSpeech
+    # utterances and make the comparison table meaningless.
     tc = yaml.safe_load(open(os.path.join(REPO, "config/train.yaml")))
     min_s = 2 + tc["watermark"]["delay_amt_second"] + tc["watermark"]["future_amt_second"]
-    min_samples = int(min_s * m.sr) if args.method == "RTSW" else int(1.0 * m.sr)
+    min_samples = int(min_s * m.sr)
 
     clips = list_clips(args.dataset, m.sr, min_samples)
     if args.n_items:
