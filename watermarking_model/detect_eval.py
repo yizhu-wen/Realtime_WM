@@ -298,7 +298,10 @@ def main():
             used += 1
         except Exception as e:
             print(f"  clip {i} failed: {type(e).__name__}: {str(e)[:90]}", flush=True)
-        if (i + 1) % 200 == 0:
+        # Checkpoint often. WavMark costs ~10 s of compute per second of
+        # audio, so 200 clips is nearly two hours of silence with no partial
+        # result and no way to measure the rate.
+        if (i + 1) % 50 == 0:
             print(f"  {i+1}/{len(clips)} ({used} used)", flush=True)
             # Checkpoint. Because the clip order is shuffled, whatever has been
             # scored so far is a uniform random sample of the corpus, so a run
