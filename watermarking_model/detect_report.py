@@ -527,12 +527,18 @@ def main():
     xlsx = os.path.join(args.out, "detection_metrics.xlsx")
     tex = os.path.join(args.out, "distortion_comparison.tex")
     write_xlsx(xlsx, per, summary, thresholds, order, imp)
-    write_tex(tex, summary, args.tex_tpr)
+    # Both operating points, always. The deterministic threshold is what a
+    # deployed detector does; the randomised one is the only comparable
+    # TPR across payload sizes. Writing both saves re-running to switch.
+    write_tex(tex, summary, "deterministic")
+    tex_x = os.path.join(args.out, "distortion_comparison_exact1pct.tex")
+    write_tex(tex_x, summary, "exact")
     if imp:
         write_imp_tex(os.path.join(args.out, "imperceptibility.tex"), imp,
                       thresholds)
 
-    print(f"\nwrote {xlsx}\nwrote {tex}\n")
+    print(f"\nwrote {xlsx}\nwrote {tex}  (deterministic threshold)"
+          f"\nwrote {tex_x}  (randomised, exactly 1% FPR)\n")
     hdr = f"{'distortion':<20}" + "".join(f"{m:>26}" for m in order)
     print(hdr)
     print("-" * len(hdr))
