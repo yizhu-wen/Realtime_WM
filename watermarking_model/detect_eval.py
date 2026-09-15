@@ -337,6 +337,12 @@ def main():
             # prefix. Lets a slow method be cut short without losing its work.
             save(args.out, m, args.dataset, names, pos, neg, used,
                  done=False, scanned=i + 1)
+            # Release cached blocks back to the driver. Even with
+            # expandable_segments the caching allocator grows with job age --
+            # one Timbre job went 3.5 GB to 9.5 GB over 80 minutes -- and with
+            # twelve workers on one card that ends in cuFFT allocation
+            # failures. Once per checkpoint is far too rare to cost throughput.
+            torch.cuda.empty_cache()
 
     save(args.out, m, args.dataset, names, pos, neg, used,
          done=True, scanned=len(clips))
