@@ -182,10 +182,19 @@ def load(indir):
         meth = str(d["method"])
         if not bool(d.get("complete", True)):
             print(f"  {meth}/{ds}: partial, {int(d['used'])} clips so far")
+        # Guard against a ragged file written before the per-clip commit was
+        # made atomic: truncate every series to the shortest so the positive
+        # and negative at index i still come from the same clip.
+        lens = [len(d[f"{w}_{k}"]) for _, k in ROWS
+                for w in ("pos", "neg") if f"{w}_{k}" in d]
+        k_min = min(lens) if lens else 0
+        if lens and max(lens) != k_min:
+            print(f"  {meth}/{ds}: ragged ({k_min}..{max(lens)}), "
+                  f"truncating to {k_min}")
         data.setdefault(meth, {})[ds] = dict(
             n_bits=int(d["n_bits"]), used=int(d["used"]),
-            pos={k: d[f"pos_{k}"] for _, k in ROWS if f"pos_{k}" in d},
-            neg={k: d[f"neg_{k}"] for _, k in ROWS if f"neg_{k}" in d},
+            pos={k: d[f"pos_{k}"][:k_min] for _, k in ROWS if f"pos_{k}" in d},
+            neg={k: d[f"neg_{k}"][:k_min] for _, k in ROWS if f"neg_{k}" in d},
         )
     return data
 

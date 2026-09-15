@@ -284,9 +284,17 @@ def main():
             if y is None:
                 continue
             neg_msg = m.random_msg(rng)  # independent null message, native format
+            # Score the whole clip before committing any of it. A codec or
+            # resampler that throws partway through would otherwise leave the
+            # arrays ragged and, worse, silently break the positive/negative
+            # pairing that the clip-level bootstrap relies on.
+            p_i, n_i = {}, {}
             for nm, idx, ratio in DISTORTIONS:
-                pos[nm].append(m.decode(apply(y, idx, ratio), msg))
-                neg[nm].append(m.decode(apply(x, idx, ratio), neg_msg))
+                p_i[nm] = m.decode(apply(y, idx, ratio), msg)
+                n_i[nm] = m.decode(apply(x, idx, ratio), neg_msg)
+            for nm in p_i:
+                pos[nm].append(p_i[nm])
+                neg[nm].append(n_i[nm])
             used += 1
         except Exception as e:
             print(f"  clip {i} failed: {type(e).__name__}: {str(e)[:90]}", flush=True)
