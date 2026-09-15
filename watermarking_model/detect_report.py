@@ -71,24 +71,31 @@ def wilson(k, n, z=Z):
 
 
 def auc_ci(pos, neg, n_boot=2000, seed=0):
-    """AUC with a percentile bootstrap CI, resampling positives and negatives
-    independently."""
+    """AUC with a paired cluster bootstrap CI.
+
+    Each clip contributes one positive and one negative at the same index, so
+    the two classes are correlated: a hard utterance drags both down together.
+    Resampling the classes independently would throw that pairing away and
+    misstate the interval, so the bootstrap resamples *clips*, carrying each
+    clip's positive and negative along together.
+    """
+    pos = np.asarray(pos, float)
+    neg = np.asarray(neg, float)
     if len(pos) == 0 or len(neg) == 0:
         return float("nan"), float("nan"), float("nan")
-    y = np.r_[np.ones(len(pos)), np.zeros(len(neg))]
-    s = np.r_[pos, neg]
-    if len(np.unique(s)) == 1:  # degenerate: every score identical
+    assert len(pos) == len(neg), (len(pos), len(neg))
+    n = len(pos)
+    y = np.r_[np.ones(n), np.zeros(n)]
+    if len(np.unique(np.r_[pos, neg])) == 1:  # degenerate: all scores identical
         return 0.5, 0.5, 0.5
-    point = roc_auc_score(y, s)
+    point = roc_auc_score(y, np.r_[pos, neg])
     rng = np.random.default_rng(seed)
     boot = np.empty(n_boot)
     for b in range(n_boot):
-        p = rng.choice(pos, len(pos), replace=True)
-        q = rng.choice(neg, len(neg), replace=True)
-        if len(np.unique(np.r_[p, q])) == 1:
-            boot[b] = 0.5
-            continue
-        boot[b] = roc_auc_score(y, np.r_[p, q])
+        idx = rng.integers(0, n, n)
+        p, q = pos[idx], neg[idx]
+        boot[b] = 0.5 if len(np.unique(np.r_[p, q])) == 1 \
+            else roc_auc_score(y, np.r_[p, q])
     lo, hi = np.percentile(boot, [2.5, 97.5])
     return float(point), float(lo), float(hi)
 
@@ -101,7 +108,33 @@ def calibrate(neg, n_bits, target=TARGET_FPR):
     return n_bits + 1
 
 
-def cell(pos, neg, n_bits, thr, seed=0):
+def calibrate_randomized(neg, n_bits, target=TARGET_FPR):
+    """Randomised Neyman-Pearson threshold hitting the target FPR exactly.
+
+    The statistic is an integer bit count, so the attainable FPRs are a ladder
+    whose spacing is set by the payload size. At 10 bits the only rungs near 1%
+    are 1.07% (t=9) and 0.098% (t=10), so a deterministic threshold holds a
+    10-bit method to a rate 10x stricter than a 40-bit one and its TPR is not
+    comparable. The standard remedy rejects outright above t and with
+    probability gamma exactly at t-1, which lands on the target for every
+    payload size and makes TPRs comparable across methods.
+    """
+    t = calibrate(neg, n_bits, target)
+    above = float(np.mean(neg >= t))
+    at = float(np.mean(neg == t - 1)) if t >= 1 else 0.0
+    gamma = 0.0 if at <= 0 else min(1.0, max(0.0, (target - above) / at))
+    return t, gamma
+
+
+def apply_randomized(scores, t, gamma):
+    """Expected rejection rate of the randomised rule (exact, not simulated)."""
+    scores = np.asarray(scores, float)
+    if len(scores) == 0:
+        return float("nan")
+    return float(np.mean(scores >= t) + gamma * np.mean(scores == t - 1))
+
+
+def cell(pos, neg, n_bits, thr, rand=None, seed=0):
     pos = np.asarray(pos, float)
     neg = np.asarray(neg, float)
     n = len(pos)
@@ -122,6 +155,9 @@ def cell(pos, neg, n_bits, thr, seed=0):
         tpr=ktp / ntp if ntp else float("nan"), tpr_lo=tlo, tpr_hi=thi,
         fpr=kfp / nfp if nfp else float("nan"), fpr_lo=flo, fpr_hi=fhi,
         thr=thr,
+        # exactly-1%-FPR operating point, comparable across payload sizes
+        tpr_x=apply_randomized(pos, *rand) if rand else float("nan"),
+        fpr_x=apply_randomized(neg, *rand) if rand else float("nan"),
     )
 
 
@@ -153,7 +189,14 @@ def load(indir):
 
 HDR = ["distortion", "n", "bit_acc", "acc_std", "acc_sem", "acc_ci_lo",
        "acc_ci_hi", "auc", "auc_ci_lo", "auc_ci_hi", "tpr", "tpr_ci_lo",
-       "tpr_ci_hi", "fpr", "fpr_ci_lo", "fpr_ci_hi", "threshold_bits"]
+       "tpr_ci_hi", "fpr", "fpr_ci_lo", "fpr_ci_hi", "threshold_bits",
+       "tpr_at_exactly_1pct_fpr", "fpr_randomized"]
+
+# HDR carries display names; KEYS are the matching cell() dict keys, in order.
+KEYS = ["acc", "acc_std", "acc_sem", "acc_lo", "acc_hi",
+        "auc", "auc_lo", "auc_hi", "tpr", "tpr_lo", "tpr_hi",
+        "fpr", "fpr_lo", "fpr_hi", "thr", "tpr_x", "fpr_x"]
+assert len(KEYS) == len(HDR) - 2
 
 
 def _sheet(ws, title):
@@ -182,7 +225,7 @@ def write_xlsx(path, per, summary, thresholds, order):
             ws.cell(ws.max_row, c).font = bold
         for label, key in ROWS:
             r = summary[meth][key]
-            ws.append([label, r["n"]] + [round(r[k], 6) for k in HDR[2:]])
+            ws.append([label, r["n"]] + [round(r[k], 6) for k in KEYS])
         ws.append([])
 
     for ds in order_datasets(per):
@@ -202,18 +245,29 @@ def write_xlsx(path, per, summary, thresholds, order):
                 r = per[meth][ds].get(key)
                 if r is None:
                     continue
-                ws.append([label, r["n"]] + [round(r[k], 6) for k in HDR[2:]])
+                ws.append([label, r["n"]] + [round(r[k], 6) for k in KEYS])
             ws.append([])
 
     ws = wb.create_sheet("Thresholds")
     ws.append(["method", "payload_bits", "threshold_bits", "pooled_negatives",
-               "realised_pooled_fpr", "target_fpr"])
-    for c in range(1, 7):
+               "realised_pooled_fpr", "target_fpr", "randomized_t",
+               "randomized_gamma"])
+    for c in range(1, 9):
         ws.cell(1, c).font = bold
     for meth in order:
         t = thresholds[meth]
         ws.append([meth, t["n_bits"], t["thr"], t["n_neg"],
-                   round(t["fpr"], 6), TARGET_FPR])
+                   round(t["fpr"], 6), TARGET_FPR, t["rand"][0],
+                   round(t["rand"][1], 6)])
+    ws.append([])
+    ws.append(["Deterministic threshold: smallest integer bit count whose "
+               "pooled FPR is <= the target. Because the statistic is discrete "
+               "the realised rate lands under the target, by a margin that "
+               "depends on payload size."])
+    ws.append(["Randomized rule: reject when score >= randomized_t, or when "
+               "score == randomized_t - 1 with probability randomized_gamma. "
+               "Hits the target FPR exactly for every payload size, so TPRs "
+               "are comparable across methods."])
 
     ws = wb.create_sheet("Raw")
     ws.append(["method", "dataset"] + HDR)
@@ -226,7 +280,7 @@ def write_xlsx(path, per, summary, thresholds, order):
                 if r is None:
                     continue
                 ws.append([meth, ds, label, r["n"]]
-                          + [round(r[k], 6) for k in HDR[2:]])
+                          + [round(r[k], 6) for k in KEYS])
 
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     wb.save(path)
@@ -284,7 +338,8 @@ def fmt(v, nd=3):
     return "--" if v != v else f"{v:.{nd}f}"
 
 
-def write_tex(path, summary):
+def write_tex(path, summary, mode="deterministic"):
+    tk, fk = ("tpr", "fpr") if mode == "deterministic" else ("tpr_x", "fpr_x")
     lines = []
     for label, key in ROWS:
         parts = [label]
@@ -293,8 +348,8 @@ def write_tex(path, summary):
             if r is None:
                 parts.append("& -- & -- & --")
             else:
-                parts.append(f"& {fmt(r['acc'])} & {fmt(r['tpr'])}/"
-                             f"{fmt(r['fpr'])} & {fmt(r['auc'])}")
+                parts.append(f"& {fmt(r['acc'])} & {fmt(r[tk])}/"
+                             f"{fmt(r[fk], 4)} & {fmt(r['auc'])}")
         lines.append("\n".join(parts) + r" \\")
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     open(path, "w").write(TEX_HEAD + "\n\n".join(lines) + TEX_TAIL)
@@ -308,6 +363,9 @@ def main():
     ap.add_argument("--in", dest="indir", default="results/detect")
     ap.add_argument("--out", default="results/evals")
     ap.add_argument("--n_boot", type=int, default=2000)
+    ap.add_argument("--tex_tpr", choices=["deterministic", "exact"],
+                    default="deterministic",
+                    help="which operating point the LaTeX TPR/FPR column uses")
     args = ap.parse_args()
 
     data = load(args.indir)
@@ -324,20 +382,23 @@ def main():
         pooled = np.concatenate([v["neg"][k] for v in byds.values()
                                  for _, k in ROWS if k in v["neg"]])
         thr = calibrate(pooled, n_bits)
+        rand = calibrate_randomized(pooled, n_bits)
         thresholds[meth] = dict(n_bits=n_bits, thr=thr, n_neg=len(pooled),
-                                fpr=float(np.mean(pooled >= thr)))
+                                fpr=float(np.mean(pooled >= thr)), rand=rand)
         print(f"{meth:<13} payload {n_bits:>2} bits, threshold >= {thr} bits, "
-              f"pooled FPR {thresholds[meth]['fpr']:.4f} "
-              f"on {len(pooled)} negatives")
+              f"pooled FPR {thresholds[meth]['fpr']:.4f} on {len(pooled)} "
+              f"negatives; randomised rule >= {rand[0]} or == {rand[0]-1} "
+              f"w.p. {rand[1]:.4f} -> exactly {TARGET_FPR:.1%}")
 
     per, summary = {}, {}
     for meth, byds in data.items():
         n_bits = thresholds[meth]["n_bits"]
         thr = thresholds[meth]["thr"]
+        rand = thresholds[meth]["rand"]
         per[meth] = {}
         for ds, v in byds.items():
             per[meth][ds] = {
-                k: cell(v["pos"][k], v["neg"][k], n_bits, thr)
+                k: cell(v["pos"][k], v["neg"][k], n_bits, thr, rand)
                 for _, k in ROWS if k in v["pos"]
             }
         # Averaged row: pooled clips give the CI, mean-of-corpora the headline.
@@ -348,15 +409,15 @@ def main():
                 continue
             pos = np.concatenate([byds[ds]["pos"][k] for ds in dss])
             neg = np.concatenate([byds[ds]["neg"][k] for ds in dss])
-            r = cell(pos, neg, n_bits, thr)
-            for f in ("acc", "auc", "tpr", "fpr"):
+            r = cell(pos, neg, n_bits, thr, rand)
+            for f in ("acc", "auc", "tpr", "fpr", "tpr_x", "fpr_x"):
                 r[f] = float(np.mean([per[meth][ds][k][f] for ds in dss]))
             summary[meth][k] = r
 
     xlsx = os.path.join(args.out, "detection_metrics.xlsx")
     tex = os.path.join(args.out, "distortion_comparison.tex")
     write_xlsx(xlsx, per, summary, thresholds, order)
-    write_tex(tex, summary)
+    write_tex(tex, summary, args.tex_tpr)
 
     print(f"\nwrote {xlsx}\nwrote {tex}\n")
     hdr = f"{'distortion':<20}" + "".join(f"{m:>26}" for m in order)

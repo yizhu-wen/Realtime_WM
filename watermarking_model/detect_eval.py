@@ -186,6 +186,19 @@ def load(path, target_sr):
     return np.ascontiguousarray(x)
 
 
+def save(out, m, dataset, names, pos, neg, used, done):
+    """Atomic write, so a reader never sees a half-written checkpoint."""
+    os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
+    tmp = out + ".tmp.npz"
+    np.savez(tmp, method=m.name, dataset=dataset, n_bits=m.n_bits, sr=m.sr,
+             used=used, complete=bool(done), names=np.array(names),
+             **{f"pos_{n}": np.array(pos[n]) for n in names},
+             **{f"neg_{n}": np.array(neg[n]) for n in names})
+    os.replace(tmp, out)
+    if done:
+        print(f"wrote {out}  ({used} clips)", flush=True)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--method", required=True,
@@ -236,6 +249,12 @@ def main():
     min_samples = int(min_s * m.sr)
 
     clips = list_clips(args.dataset, m.sr, min_samples)
+    # Shuffle before truncating. The file lists are sorted, so a sequential
+    # prefix is one contiguous block of speakers (LibriSpeech) or one stretch
+    # of a single recording session (LJSpeech). The seed is fixed and separate
+    # from --seed, so every method walks the same corpus in the same order and
+    # partial runs stay comparable across methods.
+    np.random.default_rng(0).shuffle(clips)
     if args.n_items:
         clips = clips[: args.n_items]
     print(f"{m.name} / {args.dataset}: {len(clips)} clips, sr {m.sr}, {m.n_bits} bits",
@@ -273,13 +292,13 @@ def main():
             print(f"  clip {i} failed: {type(e).__name__}: {str(e)[:90]}", flush=True)
         if (i + 1) % 200 == 0:
             print(f"  {i+1}/{len(clips)} ({used} used)", flush=True)
+            # Checkpoint. Because the clip order is shuffled, whatever has been
+            # scored so far is a uniform random sample of the corpus, so a run
+            # stopped early is a valid smaller-N result rather than a biased
+            # prefix. Lets a slow method be cut short without losing its work.
+            save(args.out, m, args.dataset, names, pos, neg, used, done=False)
 
-    os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
-    np.savez(args.out, method=m.name, dataset=args.dataset, n_bits=m.n_bits,
-             sr=m.sr, used=used, names=np.array(names),
-             **{f"pos_{n}": np.array(pos[n]) for n in names},
-             **{f"neg_{n}": np.array(neg[n]) for n in names})
-    print(f"wrote {args.out}  ({used} clips)", flush=True)
+    save(args.out, m, args.dataset, names, pos, neg, used, done=True)
 
 
 if __name__ == "__main__":
