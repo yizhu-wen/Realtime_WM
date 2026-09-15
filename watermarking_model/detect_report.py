@@ -50,6 +50,10 @@ ROWS = [
     ("Phone Call", "phone_call"),
 ]
 METHODS = ["RT-SW", "AudioSeal", "WavMark", "Timbre", "SilentCipher"]
+# payload each detector recovers; the imperceptibility table needs these
+# even before the matching detection run exists
+PAYLOAD = {"RT-SW": 10, "AudioSeal": 16, "WavMark": 16, "Timbre": 10,
+           "SilentCipher": 40}
 DATASETS = ["LibriSpeech-dev", "LJSpeech", "clone_xspeaker", "resynth_hifigan"]
 TARGET_FPR = 0.01
 Z = 1.959963984540054  # two-sided 95%
@@ -387,7 +391,7 @@ def write_imp_tex(path, imp, thresholds):
         st = [imp_stats(imp[meth][ds]) for ds in dss]
         snr = np.mean([x["snr"]["mean"] for x in st])
         pq = np.mean([x["pesq"]["mean"] for x in st])
-        nb = thresholds.get(meth, {}).get("n_bits", "--")
+        nb = thresholds.get(meth, {}).get("n_bits") or PAYLOAD.get(meth, "--")
         lines.append(f"{meth} & {nb} & {snr:.2f} & {pq:.3f} " + r"\\")
     open(path, "w").write(IMP_TEX + "\n".join(lines) +
                           "\n\\bottomrule\n\\end{tabular}\n\\end{table}\n")
