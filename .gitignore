@@ -332,3 +332,7 @@ watermarking_model/results/ckpt/pth/none-conv2_*.pth.tar
 watermarking_model/results/log/
 watermarking_model/results/samples/
 watermarking_model/results/evals/
+
+# raw per-utterance evaluation scores
+watermarking_model/results/detect/
+watermarking_model/results/imp/

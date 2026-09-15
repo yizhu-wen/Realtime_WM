@@ -10,8 +10,8 @@ from .blocks import (
 )
 from distortions.frequency import TacotronSTFT, fixed_STFT
 import julius
-import torch.nn.functional as F
 from silero_vad import load_silero_vad
+import torch.nn.functional as F
 from torchaudio.functional import resample as tf_resample
 from torchaudio.functional import (
     fftconvolve,
@@ -68,8 +68,6 @@ class Encoder(nn.Module):
         self.hop_length = process_config["mel"]["hop_length"]
         self.win_length = process_config["mel"]["win_length"]
         self.sampling_rate = process_config["audio"]["or_sample_rate"]
-        self.vad = load_silero_vad()
-        self.vad_threshold = 0.50
         self.voice_prefilling = (
             int(
                 (
@@ -239,27 +237,7 @@ class Encoder(nn.Module):
             y = self.stft.inverse(spect, phase).squeeze(1)
             del spect, phase, real_part, imag_part, all_watermark_stft
 
-            with torch.no_grad():
-                # Chunk-level speech probabilities, [B, C]
-                batch_chunk_probs = self.vad.audio_forward(x, sr=self.sampling_rate)
-            p = batch_chunk_probs.to(device=y.device, dtype=y.dtype)
-
-            # Plain silero VAD: hard threshold at 0.5, no soft step, no
-            # smoothing/dilation, no amplitude-driven floor. silero emits one
-            # probability per 512-sample chunk, so the mask expands by 512.
-            chunk_mask = (p > self.vad_threshold).to(y.dtype)  # [B, C]
-            sample_masks = torch.repeat_interleave(chunk_mask, 512, dim=1)
-            # the last chunk is zero-padded by silero, so trim to the audio
-            if sample_masks.shape[-1] < self.stft.num_samples:
-                sample_masks = F.pad(
-                    sample_masks,
-                    (0, self.stft.num_samples - sample_masks.shape[-1]),
-                )
-            sample_masks = sample_masks[:, : self.stft.num_samples]
-
-            masked_y = y * sample_masks
-
-            return masked_y, zeros_right.shape[-1]
+            return y, zeros_right.shape[-1]
         else:
             print("Not enough watermarking!!!!")
             return None
@@ -277,6 +255,15 @@ class Decoder(nn.Module):
         self.win_dim = int((process_config["mel"]["n_fft"] / 2) + 1)
         self.hop_length = process_config["mel"]["hop_length"]
         self.distortion = train_config["optimize"]["distortion"]
+        # Adaptive soft VAD, applied as the LAST stage of the telephony
+        # chain (after the bandpass) rather than as an encoder-side gate.
+        self.vad = load_silero_vad()
+        self.vad_threshold = 0.50
+        self.tau = train_config["optimize"]["tau"]
+        self.smooth_chunks = train_config["optimize"]["smooth_chunks"]
+        self.dilate_chunks = train_config["optimize"]["dilate_chunks"]
+        self.target_smooth_ms = train_config["optimize"]["target_smooth_ms"]
+        self.target_dilate_ms = train_config["optimize"]["target_dilate_ms"]
         self.cutoff_freq_low = 300
         self.cutoff_freq_high = 3400
         self.block = model_config["conv2"]["block"]
@@ -311,11 +298,63 @@ class Decoder(nn.Module):
             snr_db = torch.randint(20, 26, (1,), device=y.device)
             bg_added = add_noise(rir_applied, torch.randn_like(y), snr_db)
 
-            y_d = julius.bandpass_filter(
+            banded = julius.bandpass_filter(
                 bg_added,
                 cutoff_low=self.cutoff_freq_low / self.original_sample_rate,
                 cutoff_high=self.cutoff_freq_high / self.original_sample_rate,
             )
+
+            # ---- stage 4: adaptive soft VAD on the band-limited signal ----
+            T = banded.shape[-1]
+            with torch.no_grad():
+                probs = self.vad.audio_forward(
+                    banded.detach(), sr=self.original_sample_rate
+                )
+            p = probs.to(device=banded.device, dtype=banded.dtype)  # [B, C]
+            C = p.shape[-1]
+            hop_ms = 1000.0 * T / (C * self.original_sample_rate)
+
+            smooth_chunks = self.smooth_chunks
+            dilate_chunks = self.dilate_chunks
+            if smooth_chunks is None:
+                smooth_chunks = max(1, int(round(self.target_smooth_ms / hop_ms)))
+            if dilate_chunks is None:
+                dilate_chunks = max(0, int(round(self.target_dilate_ms / hop_ms)))
+                if dilate_chunks == 0:
+                    dilate_chunks = 1
+
+            m_chunk = torch.sigmoid((p - self.vad_threshold) / self.tau)
+            if smooth_chunks > 1:
+                k = (
+                    torch.ones(1, 1, smooth_chunks, device=p.device, dtype=p.dtype)
+                    / smooth_chunks
+                )
+                z = F.pad(
+                    m_chunk.unsqueeze(1), (smooth_chunks // 2,) * 2, mode="replicate"
+                )
+                m_chunk = F.conv1d(z, k, stride=1).squeeze(1)
+            if dilate_chunks > 0:
+                z = F.pad(m_chunk.unsqueeze(1), (dilate_chunks,) * 2, mode="replicate")
+                m_chunk = F.max_pool1d(
+                    z, kernel_size=2 * dilate_chunks + 1, stride=1
+                ).squeeze(1)
+            m_up = F.interpolate(
+                m_chunk.unsqueeze(1), size=T, mode="linear", align_corners=True
+            ).squeeze(1)
+
+            # amplitude-driven floor, from the same band-limited signal
+            rms = banded.detach().unfold(-1, 512, 256).pow(2).mean(dim=-1).sqrt()
+            rms = rms / (rms.max(dim=1, keepdim=True).values + 1e-8)
+            dynamic_floor = F.interpolate(
+                rms.unsqueeze(1), size=T, mode="linear", align_corners=True
+            ).squeeze(1)
+            floor_min, floor_max = 0.05, 0.2
+            dynamic_floor = floor_min + (floor_max - floor_min) * dynamic_floor
+
+            soft_sample_masks = (
+                dynamic_floor + (1.0 - dynamic_floor) * m_up
+            ).clamp_(0.0, 1.0)
+            y_d = banded * soft_sample_masks
 
         else:
             y_d = y
