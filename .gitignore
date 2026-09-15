@@ -333,7 +333,13 @@ watermarking_model/results/ckpt/pth/none-conv2_*.pth.tar
 !watermarking_model/results/ckpt/pth/none-conv2_ep_20_2026-09-11_06_02_42.pth.tar
 watermarking_model/results/log/
 watermarking_model/results/samples/
-watermarking_model/results/evals/
+# evaluation outputs: raw per-utterance scores stay out (regenerable,
+# and rewritten every few minutes), but the tables and workbook are the
+# deliverables and belong in the repo
+watermarking_model/results/evals/*
+!watermarking_model/results/evals/*.tex
+!watermarking_model/results/evals/*.txt
+!watermarking_model/results/evals/*.xlsx
 
 # raw per-utterance evaluation scores
 watermarking_model/results/detect/

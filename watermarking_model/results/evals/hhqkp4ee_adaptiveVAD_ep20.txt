@@ -1,0 +1,31 @@
+/home/yizwen/.conda/envs/timbrewm/lib/python3.11/site-packages/librosa/util/files.py:10: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  from pkg_resources import resource_filename
+checkpoint: results/ckpt/pth/none-conv2_ep_20_2026-09-10_02_27_30.pth.tar (epoch 20)
+
+LibriSpeech-dev: 2303 utterances available
+
+LJSpeech: 2700 utterances available
+
+clone_xspeaker: 1624 utterances available
+
+resynth_hifigan: 2000 utterances available
+
+==========================================================================
+Bit accuracy by distortion (batch size 1, no padding)
+==========================================================================
+distortion                 LibriSpeech-dev            LJSpeech      clone_xspeaker     resynth_hifigan
+------------------------------------------------------------------------------------------------------
+none                         0.9249 (2287)       0.9668 (2690)       0.8890 (1611)       0.8865 (1990)
+resample_8k                  0.9274 (2287)       0.9603 (2690)       0.8893 (1611)       0.8850 (1990)
+gaussian_noise_20            0.5617 (2287)       0.5605 (2690)       0.5429 (1611)       0.5490 (1990)
+median_filter                0.8585 (2287)       0.8652 (2690)       0.8025 (1611)       0.8006 (1990)
+low_pass_2k                  0.7674 (2287)       0.7891 (2690)       0.7357 (1611)       0.7291 (1990)
+low_pass_4k                  0.9152 (2287)       0.9455 (2690)       0.8731 (1611)       0.8667 (1990)
+high_pass_500                0.9216 (2287)       0.9623 (2690)       0.8841 (1611)       0.8853 (1990)
+reencode                     0.9247 (2287)       0.9666 (2690)       0.8888 (1611)       0.8856 (1990)
+compression                  0.8605 (2287)       0.9120 (2690)       0.8212 (1611)       0.8005 (1990)
+noise_suppression            0.8602 (2287)       0.9206 (2690)       0.8253 (1611)       0.8085 (1990)
+phone_call_legacy            0.7401 (2287)       0.7596 (2690)       0.6992 (1611)       0.7079 (1990)
+phone_call_trainmatch        0.8985 (2287)       0.9293 (2690)       0.8385 (1611)       0.8551 (1990)
+------------------------------------------------------------------------------------------------------
+SNR (dB)                             40.96               41.97               43.26               41.70

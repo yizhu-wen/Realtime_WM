@@ -1,0 +1,104 @@
+\begin{table*}[t]
+\centering
+\caption{
+Detection results under different audio distortions.
+Acc. denotes detection accuracy, TPR/FPR denotes the true-positive
+and false-positive rates, and AUC denotes the area under the ROC curve.
+}
+\label{tab:distortion_comparison}
+
+\resizebox{\textwidth}{!}{
+\begin{tabular}{l ccc ccc ccc ccc ccc}
+\toprule
+& \multicolumn{3}{c}{\textbf{RT-SW}}
+& \multicolumn{3}{c}{\textbf{AudioSeal}}
+& \multicolumn{3}{c}{\textbf{WavMark}}
+& \multicolumn{3}{c}{\textbf{Timbre}}
+& \multicolumn{3}{c}{\textbf{SilentCipher}} \\
+
+\cmidrule(lr){2-4}
+\cmidrule(lr){5-7}
+\cmidrule(lr){8-10}
+\cmidrule(lr){11-13}
+\cmidrule(lr){14-16}
+
+\textbf{Distortion}
+& \textbf{Acc.} & \textbf{TPR/FPR} & \textbf{AUC}
+& \textbf{Acc.} & \textbf{TPR/FPR} & \textbf{AUC}
+& \textbf{Acc.} & \textbf{TPR/FPR} & \textbf{AUC}
+& \textbf{Acc.} & \textbf{TPR/FPR} & \textbf{AUC}
+& \textbf{Acc.} & \textbf{TPR/FPR} & \textbf{AUC} \\
+\midrule
+No Distortion
+& 0.974 & 0.852/0.0011 & 0.992
+& 1.000 & 1.000/0.0033 & 1.000
+& 1.000 & 1.000/0.0000 & 1.000
+& 1.000 & 1.000/0.0050 & 1.000
+& -- & -- & -- \\
+
+Resample (8k)
+& 0.932 & 0.658/0.0014 & 0.971
+& 1.000 & 1.000/0.0067 & 1.000
+& 1.000 & 1.000/0.0000 & 1.000
+& 1.000 & 1.000/0.0125 & 1.000
+& -- & -- & -- \\
+
+Gaussian Noise
+& 0.609 & 0.016/0.0006 & 0.681
+& 0.799 & 0.573/0.0067 & 0.969
+& 0.500 & 0.000/0.0000 & 0.500
+& 0.890 & 0.719/0.0063 & 0.965
+& -- & -- & -- \\
+
+Median Filter
+& 0.940 & 0.697/0.0007 & 0.976
+& 1.000 & 1.000/0.0033 & 1.000
+& 1.000 & 1.000/0.0000 & 1.000
+& 1.000 & 1.000/0.0125 & 0.999
+& -- & -- & -- \\
+
+Low-pass 4k
+& 0.933 & 0.669/0.0013 & 0.972
+& 1.000 & 1.000/0.0067 & 1.000
+& 1.000 & 1.000/0.0000 & 1.000
+& 1.000 & 1.000/0.0063 & 0.999
+& -- & -- & -- \\
+
+High-pass 500
+& 0.966 & 0.818/0.0009 & 0.987
+& 1.000 & 1.000/0.0000 & 1.000
+& 1.000 & 1.000/0.0000 & 1.000
+& 1.000 & 1.000/0.0075 & 1.000
+& -- & -- & -- \\
+
+Reencode
+& 0.974 & 0.852/0.0011 & 0.992
+& 1.000 & 1.000/0.0033 & 1.000
+& 1.000 & 1.000/0.0000 & 1.000
+& 1.000 & 1.000/0.0050 & 1.000
+& -- & -- & -- \\
+
+Compression
+& 0.967 & 0.812/0.0010 & 0.989
+& 1.000 & 1.000/0.0100 & 1.000
+& 1.000 & 1.000/0.0000 & 1.000
+& 1.000 & 1.000/0.0075 & 1.000
+& -- & -- & -- \\
+
+Noise Suppression
+& 0.925 & 0.666/0.0013 & 0.963
+& 0.996 & 0.993/0.0067 & 0.998
+& 0.981 & 0.967/0.0000 & 0.983
+& 0.998 & 0.994/0.0125 & 0.998
+& -- & -- & -- \\
+
+Phone Call
+& 0.900 & 0.528/0.0011 & 0.956
+& 0.555 & 0.037/0.0133 & 0.613
+& 0.500 & 0.000/0.0000 & 0.500
+& 0.781 & 0.311/0.0100 & 0.904
+& -- & -- & -- \\
+\bottomrule
+\end{tabular}
+}
+\end{table*}
