@@ -175,8 +175,13 @@ def load(indir):
         if not m:
             print(f"  skipping unrecognised {base}")
             continue
-        meth, ds = m.group(1), m.group(2)
+        ds = m.group(2)
         d = np.load(f, allow_pickle=True)
+        # the display name lives in the file; the filename uses the CLI key
+        # ("RTSW" vs "RT-SW"), so trust the file
+        meth = str(d["method"])
+        if not bool(d.get("complete", True)):
+            print(f"  {meth}/{ds}: partial, {int(d['used'])} clips so far")
         data.setdefault(meth, {})[ds] = dict(
             n_bits=int(d["n_bits"]), used=int(d["used"]),
             pos={k: d[f"pos_{k}"] for _, k in ROWS if f"pos_{k}" in d},
@@ -204,7 +209,7 @@ def _sheet(ws, title):
     return ws
 
 
-def write_xlsx(path, per, summary, thresholds, order):
+def write_xlsx(path, per, summary, thresholds, order, imp=None):
     from openpyxl import Workbook
     from openpyxl.styles import Font
 
@@ -269,6 +274,39 @@ def write_xlsx(path, per, summary, thresholds, order):
                "Hits the target FPR exactly for every payload size, so TPRs "
                "are comparable across methods."])
 
+    if imp:
+        ws = wb.create_sheet("Imperceptibility")
+        ws.append(["Measured on the clean/watermarked pair before any channel: "
+                   "no distortion, no decoding, no threshold."])
+        ws["A1"].font = bold
+        ws.append([])
+        hdr = ["method", "dataset", "n", "snr_mean_db", "snr_std",
+               "snr_ci_lo", "snr_ci_hi", "pesq_mean", "pesq_std",
+               "pesq_ci_lo", "pesq_ci_hi"]
+        ws.append(hdr)
+        for c in range(1, len(hdr) + 1):
+            ws.cell(ws.max_row, c).font = bold
+        for meth in order:
+            if meth not in imp:
+                continue
+            rows = []
+            for ds in order_datasets(per) or list(imp[meth]):
+                if ds not in imp[meth]:
+                    continue
+                st = imp_stats(imp[meth][ds])
+                rows.append(st)
+                ws.append([meth, ds, st["snr"]["n"]]
+                          + [round(st["snr"][k], 4)
+                             for k in ("mean", "std", "lo", "hi")]
+                          + [round(st["pesq"][k], 4)
+                             for k in ("mean", "std", "lo", "hi")])
+            if rows:
+                ws.append([meth, "MEAN OF CORPORA", "",
+                           round(float(np.mean([r["snr"]["mean"] for r in rows])), 4),
+                           "", "", "",
+                           round(float(np.mean([r["pesq"]["mean"] for r in rows])), 4)])
+                ws.cell(ws.max_row, 1).font = bold
+
     ws = wb.create_sheet("Raw")
     ws.append(["method", "dataset"] + HDR)
     for c in range(1, len(HDR) + 3):
@@ -284,6 +322,66 @@ def write_xlsx(path, per, summary, thresholds, order):
 
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     wb.save(path)
+
+
+def load_imp(indir):
+    """{method: {dataset: {'snr': array, 'pesq': array}}}"""
+    out = {}
+    for f in sorted(glob.glob(os.path.join(indir, "*.npz"))):
+        base = os.path.basename(f)[:-4]
+        if base.startswith("_"):
+            continue
+        m = re.match(r"^(.*)_(%s)$" % "|".join(map(re.escape, DATASETS)), base)
+        if not m:
+            continue
+        d = np.load(f, allow_pickle=True)
+        out.setdefault(str(d["method"]), {})[m.group(2)] = dict(
+            snr=np.asarray(d["snr"], float), pesq=np.asarray(d["pesq"], float))
+    return out
+
+
+def imp_stats(v):
+    """Mean, std and 95% CI of SNR and PESQ, ignoring clips PESQ rejected."""
+    r = {}
+    for k in ("snr", "pesq"):
+        a = np.asarray(v[k], float)
+        a = a[np.isfinite(a)]
+        n = len(a)
+        mean = float(a.mean()) if n else float("nan")
+        std = float(a.std(ddof=1)) if n > 1 else float("nan")
+        sem = std / np.sqrt(n) if n > 1 else float("nan")
+        r[k] = dict(n=n, mean=mean, std=std,
+                    lo=mean - Z * sem if n > 1 else float("nan"),
+                    hi=mean + Z * sem if n > 1 else float("nan"))
+    return r
+
+
+IMP_TEX = r"""\begin{table}[t]
+\centering
+\caption{Imperceptibility of the embedded watermark, averaged over the four
+evaluation corpora. SNR is speech power over watermark power; PESQ is ITU-T
+P.862 wideband. Payload is the message size each detector recovers.}
+\label{tab:imperceptibility}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Method} & \textbf{Payload (bits)} & \textbf{SNR (dB)} & \textbf{PESQ} \\
+\midrule
+"""
+
+
+def write_imp_tex(path, imp, thresholds):
+    lines = []
+    for meth in METHODS:
+        if meth not in imp:
+            continue
+        dss = list(imp[meth])
+        st = [imp_stats(imp[meth][ds]) for ds in dss]
+        snr = np.mean([x["snr"]["mean"] for x in st])
+        pq = np.mean([x["pesq"]["mean"] for x in st])
+        nb = thresholds.get(meth, {}).get("n_bits", "--")
+        lines.append(f"{meth} & {nb} & {snr:.2f} & {pq:.3f} " + r"\\")
+    open(path, "w").write(IMP_TEX + "\n".join(lines) +
+                          "\n\\bottomrule\n\\end{tabular}\n\\end{table}\n")
 
 
 def order_datasets(per):
@@ -361,6 +459,8 @@ def write_tex(path, summary, mode="deterministic"):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--in", dest="indir", default="results/detect")
+    ap.add_argument("--imp", dest="impdir", default="results/imp",
+                    help="directory of imperceptibility.py outputs; '' to skip")
     ap.add_argument("--out", default="results/evals")
     ap.add_argument("--n_boot", type=int, default=2000)
     ap.add_argument("--tex_tpr", choices=["deterministic", "exact"],
@@ -369,6 +469,7 @@ def main():
     args = ap.parse_args()
 
     data = load(args.indir)
+    imp = load_imp(args.impdir) if args.impdir and os.path.isdir(args.impdir) else {}
     if not data:
         raise SystemExit(f"no .npz under {args.indir}")
 
@@ -416,8 +517,11 @@ def main():
 
     xlsx = os.path.join(args.out, "detection_metrics.xlsx")
     tex = os.path.join(args.out, "distortion_comparison.tex")
-    write_xlsx(xlsx, per, summary, thresholds, order)
+    write_xlsx(xlsx, per, summary, thresholds, order, imp)
     write_tex(tex, summary, args.tex_tpr)
+    if imp:
+        write_imp_tex(os.path.join(args.out, "imperceptibility.tex"), imp,
+                      thresholds)
 
     print(f"\nwrote {xlsx}\nwrote {tex}\n")
     hdr = f"{'distortion':<20}" + "".join(f"{m:>26}" for m in order)
