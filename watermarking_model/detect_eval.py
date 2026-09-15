@@ -329,6 +329,12 @@ def main():
         # Checkpoint often. WavMark costs ~10 s of compute per second of
         # audio, so 200 clips is nearly two hours of silence with no partial
         # result and no way to measure the rate.
+        # Release cached blocks often. Once per 50-clip checkpoint was not
+        # enough: at SilentCipher's ~32 s/clip that is 27 minutes between
+        # calls, and jobs still grew to 8-13 GB, taking the card to 91% full.
+        # Every 10 clips is a few minutes and costs nothing measurable.
+        if (i + 1) % 10 == 0:
+            torch.cuda.empty_cache()
         if (i + 1) % 50 == 0:
             print(f"  {i+1}/{len(clips)} ({used} used)", flush=True)
             # Checkpoint. Because the clip order is shuffled, whatever has been
