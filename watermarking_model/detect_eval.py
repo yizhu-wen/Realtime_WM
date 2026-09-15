@@ -215,6 +215,15 @@ def main():
     from distortions.dl import distortion
     import yaml
 
+    # Bound the cuFFT plan cache. It keys plans by signal shape and defaults to
+    # 4096 entries, and every clip has a different length, so it grows without
+    # limit: 400 distinct lengths cost 1096 MiB, against 134 MiB at max_size 16.
+    # cuFFT allocates these outside PyTorch's allocator, so they are invisible
+    # to memory_reserved() and empty_cache() never frees them -- which is why
+    # the card filled up despite periodic cache releases, and why the failures
+    # were specifically CUFFT_ALLOC_FAILED.
+    torch.backends.cuda.cufft_plan_cache.max_size = 16
+
     # The distortion chain must run at the method's own sample rate, or its
     # filter cutoffs and resamplers are wrong. Read the rate off the class
     # rather than an instance, so the chain can be built before the method
