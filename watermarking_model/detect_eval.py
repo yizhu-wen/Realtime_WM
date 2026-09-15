@@ -186,12 +186,13 @@ def load(path, target_sr):
     return np.ascontiguousarray(x)
 
 
-def save(out, m, dataset, names, pos, neg, used, done):
+def save(out, m, dataset, names, pos, neg, used, done, scanned=0):
     """Atomic write, so a reader never sees a half-written checkpoint."""
     os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
     tmp = out + ".tmp.npz"
     np.savez(tmp, method=m.name, dataset=dataset, n_bits=m.n_bits, sr=m.sr,
-             used=used, complete=bool(done), names=np.array(names),
+             used=used, complete=bool(done), scanned=int(scanned),
+             names=np.array(names),
              **{f"pos_{n}": np.array(pos[n]) for n in names},
              **{f"neg_{n}": np.array(neg[n]) for n in names})
     os.replace(tmp, out)
@@ -265,6 +266,31 @@ def main():
     neg = {n: [] for n in names}
     rng = np.random.default_rng(args.seed)
     used = 0
+    start = 0
+
+    # Resume an interrupted run. The clip order is deterministic (shuffled with
+    # a fixed seed), so the first `scanned` entries are exactly the ones already
+    # attempted, and the message draws are replayed to keep the RNG aligned.
+    # Without this a crash at clip 800 threw away every clip before it.
+    if os.path.exists(args.out):
+        try:
+            prev = np.load(args.out, allow_pickle=True)
+            have = "scanned" in prev.files
+            if not bool(prev["complete"]) and have and int(prev["scanned"]) > 0:
+                start = int(prev["scanned"])
+                used = int(prev["used"])
+                for nm in names:
+                    pos[nm] = list(prev[f"pos_{nm}"])
+                    neg[nm] = list(prev[f"neg_{nm}"])
+                for _ in range(used):        # replay: one msg + one null per kept clip
+                    m.random_msg(rng)
+                    m.random_msg(rng)
+                print(f"  resuming at clip {start} ({used} already scored)",
+                      flush=True)
+        except Exception as e:
+            print(f"  could not resume ({type(e).__name__}), starting over",
+                  flush=True)
+            start, used = 0, 0
 
     def apply(sig, idx, ratio):
         t = torch.from_numpy(np.ascontiguousarray(sig))[None, None].to(dev)
@@ -278,6 +304,8 @@ def main():
         return np.ascontiguousarray(y)
 
     for i, f in enumerate(clips):
+        if i < start:
+            continue
         try:
             x = load(f, m.sr)
             y, msg = m.embed(x, rng)
@@ -307,9 +335,11 @@ def main():
             # scored so far is a uniform random sample of the corpus, so a run
             # stopped early is a valid smaller-N result rather than a biased
             # prefix. Lets a slow method be cut short without losing its work.
-            save(args.out, m, args.dataset, names, pos, neg, used, done=False)
+            save(args.out, m, args.dataset, names, pos, neg, used,
+                 done=False, scanned=i + 1)
 
-    save(args.out, m, args.dataset, names, pos, neg, used, done=True)
+    save(args.out, m, args.dataset, names, pos, neg, used,
+         done=True, scanned=len(clips))
 
 
 if __name__ == "__main__":
