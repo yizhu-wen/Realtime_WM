@@ -329,6 +329,8 @@ wandb_api.txt
 
 ### Training run artifacts (keep on disk, not in git)
 watermarking_model/results/ckpt/pth/none-conv2_*.pth.tar
+# except the best model (rohklsax, plain hard encoder gate, 20 epochs)
+!watermarking_model/results/ckpt/pth/none-conv2_ep_20_2026-09-11_06_02_42.pth.tar
 watermarking_model/results/log/
 watermarking_model/results/samples/
 watermarking_model/results/evals/
