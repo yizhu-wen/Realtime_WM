@@ -25,12 +25,6 @@ optimize:
   eps: 0.000000001
   weight_decay: 0.0
   distortion: true          # RIR + noise + bandpass before decoding
-  # adaptive soft VAD (last stage of the distortion chain)
-  smooth_chunks: null       # null => derive from target_smooth_ms
-  dilate_chunks: null       # null => derive from target_dilate_ms
-  target_smooth_ms: 40
-  target_dilate_ms: 15
-  tau: 0.15                 # softness of the VAD threshold
 
 iter:
   epoch: 20
@@ -41,6 +35,6 @@ iter:
 wandb:
   enabled: true
   project: "real-time-voice-watermark"
-  name: "softVADinChannel_20ep_lmeff0.01_band300-3400_sameRIR"
+  name: "plainVAD_20ep_lmeff0.01_band300-3400_sameRIR"
   # API key is read from the WANDB_API_KEY environment variable.
   # Do not commit a key here.
