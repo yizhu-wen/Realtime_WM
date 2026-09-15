@@ -505,6 +505,100 @@ LJSpeech tracked LibriSpeech almost exactly, so corpus shift is not a problem.
 removing 4-8 kHz strips signal (-17). Filters were verified with a white-noise
 probe to rule out a filter bug.
 
+## Detection metrics and baseline comparison (2026-09-14)
+
+Three scripts, run from `watermarking_model/`:
+
+| script | what | output |
+| --- | --- | --- |
+| `detect_eval.py` | per-utterance detection scores, one method x one corpus | `results/detect/<Method>_<Corpus>.npz` |
+| `imperceptibility.py` | per-utterance SNR and wideband PESQ | `results/imp/<Method>_<Corpus>.npz` |
+| `detect_report.py` | aggregates both into Excel + LaTeX | `results/evals/` |
+
+Five methods: RT-SW (this repo, `rohklsax`) plus AudioSeal, WavMark, Timbre and
+SilentCipher, wrapped by `/data/yizwen/wm_shift_exp/methods.py`. Four corpora:
+LibriSpeech dev 2303, LJSpeech 2700, clone_xspeaker 1624, resynth_hifigan.
+
+### Protocol
+
+Per clip, per distortion: the **positive** is `decode(distort(embed(x)))` scored
+against the embedded message; the **negative** is `decode(distort(x))` on the
+same clip, unwatermarked, scored against an independent random message. The
+statistic is the bit-match count, which every method supports whatever its
+payload. Under H0 it is Binomial(n_bits, 0.5), so the negatives form an
+empirical null.
+
+Pairing positives and negatives on the same clip controls for speaker and
+content, but makes the classes correlated -- the AUC bootstrap therefore
+resamples **clips**, not the two classes independently.
+
+The set is exactly balanced by construction, which does not actually matter:
+TPR and FPR are each computed within one class, so prevalence cancels. It would
+matter for classification accuracy, precision or F1, none of which are reported.
+
+### The payload-size trap
+
+The statistic is an integer, so attainable FPRs form a ladder whose spacing is
+set by payload size. Near 1%:
+
+| payload | rungs |
+| --- | --- |
+| 10 bits (RT-SW, Timbre) | 1.07% at t=9, **0.098%** at t=10 -- nothing between |
+| 16 bits (AudioSeal, WavMark) | 1.06% at t=13, 0.21% at t=14 |
+| 40 bits (SilentCipher) | lands close to 1% |
+
+A deterministic threshold therefore holds a 10-bit method to a rate up to 10x
+stricter than a 40-bit one, and their TPRs are **not comparable**. Worse, it is
+unstable: as the pooled null grew from 7900 to 11890 negatives RT-SW's
+threshold flipped 9 -> 10 and its clean TPR moved 0.935 -> 0.874, on sampling
+noise alone.
+
+`detect_report.py` reports both operating points. Use `--tex_tpr exact` (a
+randomised Neyman-Pearson rule: reject above t, and at t-1 with probability
+gamma) for anything comparing methods. AUC is threshold-free and immune.
+
+### Things that will bite
+
+- **Same clips for every method.** The duration filter is RT-SW's 3 s minimum
+  for all five. Filtering per method handed the baselines 400 extra short
+  LibriSpeech utterances and made the table meaningless.
+- **Timbre collides with this repo.** TimbreWatermarking is a fork and ships a
+  `distortions` package with the same module names but an STFT taking
+  `[B, 1, T]` where ours takes `[B, T]`. Whichever imports first wins for both.
+  `detect_eval.py` builds our chain first, then drops `distortions` from
+  `sys.modules` and this repo from `sys.path`.
+- **SilentCipher's payload is 5 bytes, not 40 bits.** Null messages are drawn
+  per method by `random_msg()`; drawing 40 bits makes `bits_of_bytes` return
+  320 and the comparison fails to broadcast.
+- **Clip order is shuffled** (fixed seed 0, separate from `--seed`) before
+  truncation, because the sorted prefix is one block of speakers. Combined with
+  the 200-clip checkpointing, an interrupted run is a valid smaller-N sample.
+- **The GPU is the bottleneck, not the CPU.** 12 concurrent jobs serialized
+  almost completely (RT-SW 1.1 -> 10 s/clip) for ~20% aggregate gain. Use 3.
+- **WavMark costs ~15 s/clip**, 20x RT-SW, because its decode is a 0.1 s-shift
+  sliding sync search. `decode_batch_size` does not help (10 -> 400 was
+  *slower*, identical accuracy).
+- **Two environments.** RT-SW needs `timbrewm` conda; the baselines need
+  `/data/yizwen/.venv-wm`. `pesq` was installed into both on 2026-09-14.
+- **RT-SW needs `conv2_mel_modules.py` at `1add787`** to load `rohklsax`
+  strictly. Check it out before running, restore with
+  `git restore --source=HEAD --staged --worktree` after.
+
+### Imperceptibility
+
+SNR is `10*log10(mean(x^2)/mean((y-x)^2))`, the same definition `evaluate.py`
+uses. PESQ is ITU-T P.862 wideband, defined only at 16 kHz, so SilentCipher's
+44.1 kHz signals are resampled for PESQ alone; SNR stays native.
+
+First figures (LibriSpeech-dev): SilentCipher 48.9 dB / 4.55, RT-SW 38.8 /
+4.12, WavMark 35.9 / 3.95, Timbre 27.0 / 3.59, AudioSeal 26.4 / **4.31**.
+AudioSeal is why SNR alone is not enough -- it has the worst SNR and the second
+best PESQ, because it shapes the watermark perceptually rather than minimising
+its energy.
+
+RT-SW's measured 38.82 dB (dev) and 40.89 dB (LJSpeech) match the 38.97 and
+40.80 recorded for this checkpoint above, which validates the measurement.
+
 ## Open items
 
 1. **Retune the loss weights.** Two full-scale runs now confirm it. The
