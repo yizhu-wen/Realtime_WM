@@ -557,6 +557,49 @@ noise alone.
 randomised Neyman-Pearson rule: reject above t, and at t-1 with probability
 gamma) for anything comparing methods. AUC is threshold-free and immune.
 
+### The GPU exhaustion was the cuFFT plan cache, not capacity
+
+Two jobs died with `cuFFT error: CUFFT_ALLOC_FAILED` and the card kept filling
+to 90%+. Three plausible-looking diagnoses were all wrong: too many workers,
+allocator fragmentation, and releasing the cache too rarely.
+
+The cause is that PyTorch caches cuFFT plans keyed by signal shape, up to 4096
+by default, and every clip has a different length. Measured: 400 distinct
+lengths cost 1096 MiB against 134 MiB at `max_size = 16`, an 8x difference, and
+each job sees thousands of lengths.
+
+What made it hard to see is that **cuFFT allocates plans outside PyTorch's
+caching allocator**. A probe showed 300 cached plans while
+`torch.cuda.memory_reserved()` reported 0 MiB, so `empty_cache()` could never
+free them and `expandable_segments` addressed the wrong allocator. The error
+name was the clue all along -- it is the *plan* allocator that runs out, not
+the tensor allocator.
+
+`detect_eval.py` now sets `torch.backends.cuda.cufft_plan_cache.max_size = 16`.
+Twelve workers went from 74 GB to 14 GB, and throughput rose ~60% because the
+card was no longer thrashing. Any script that FFTs over variable-length audio
+needs this.
+
+### WavMark does not parallelise; do not over-subscribe
+
+| workers | s/clip | aggregate |
+| --- | --- | --- |
+| 5 | 65 | 277 clips/h |
+| 16 | 330 | **172 clips/h** |
+
+Its decode is a 0.1 s-shift sliding sync search on the GPU, so extra workers
+queue on the same bottleneck instead of adding throughput. Sharding a corpus
+across processes (`--start/--stop`, merged by `detect_report`) is worth doing
+once, to use a machine that would otherwise sit at five busy cores out of 24;
+doing it a second time cost 38% of the throughput.
+
+`resume_paused.sh` is the remedy when this happens: SIGSTOP half the workers
+rather than killing them, which preserves their state and checkpoints, and
+resume them when the running half drains.
+
+Cost per clip also scales with clip length -- 44 s for a 4.7 s clip, 98 s for a
+10 s one -- so an estimate taken from a few short clips will be badly wrong.
+
 ### Things that will bite
 
 - **Same clips for every method.** The duration filter is RT-SW's 3 s minimum
