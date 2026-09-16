@@ -213,11 +213,22 @@ def main():
                     help="one past the last clip index; 0 = to the end")
     ap.add_argument("--out", required=True)
     ap.add_argument("--seed", type=int, default=1234)
+    ap.add_argument("--suite", choices=["dl", "paper"], default="dl",
+                    help="dl = the original distortions.dl chain; "
+                         "paper = the 12 selected AudioSeal/Timbre/"
+                         "SilentCipher attacks")
     args = ap.parse_args()
 
     import torch
     from distortions.dl import distortion
     import yaml
+
+    # Import before the Timbre purge below: that drops `distortions` from
+    # sys.modules and this repo from sys.path so Timbre loads its own package,
+    # which has no paper_attacks module.
+    PaperAttacks = None
+    if args.suite == "paper":
+        from distortions.paper_attacks import PaperAttacks
 
     # Bound the cuFFT plan cache. It keys plans by signal shape and defaults to
     # 4096 entries, and every clip has a different length, so it grows without
@@ -261,6 +272,8 @@ def main():
     tc = yaml.safe_load(open(os.path.join(REPO, "config/train.yaml")))
     min_s = 2 + tc["watermark"]["delay_amt_second"] + tc["watermark"]["future_amt_second"]
     min_samples = int(min_s * m.sr)
+    if args.suite == "paper":
+        min_samples = int(min_samples / 0.9)   # crop_end removes 10%
 
     clips = list_clips(args.dataset, m.sr, min_samples)
     # Shuffle before truncating. The file lists are sorted, so a sequential
@@ -284,7 +297,21 @@ def main():
     if sharded:
         print(f"  shard: clips [{lo}, {hi})", flush=True)
 
-    names = [d[0] for d in DISTORTIONS]
+    # The paper suite replaces the dl.py chain wholesale: different attacks,
+    # applied on numpy at the method's own rate rather than through the torch
+    # distortion module. Everything else -- protocol, resume, sharding,
+    # metrics -- is unchanged, so the two suites are directly comparable.
+    if args.suite == "paper":
+        PAPER_12 = ["boost", "duck", "mp3_64", "mp3_128", "aac_64", "aac_128",
+                    "pink_noise", "crop_end", "ogg", "time_jitter",
+                    "speech_mix_-15dB", "sample_suppress"]
+        pool = [load(c, m.sr) for c in clips[-20:]]
+        pa = PaperAttacks(mixer_pool=pool, seed=0, sr=m.sr)
+        active = [(k, None, None) for k in PAPER_12]
+    else:
+        active = DISTORTIONS
+
+    names = [d[0] for d in active]
     pos = {n: [] for n in names}
     neg = {n: [] for n in names}
     rng = np.random.default_rng(args.seed)
@@ -342,9 +369,13 @@ def main():
             # arrays ragged and, worse, silently break the positive/negative
             # pairing that the clip-level bootstrap relies on.
             p_i, n_i = {}, {}
-            for nm, idx, ratio in DISTORTIONS:
-                p_i[nm] = m.decode(apply(y, idx, ratio), msg)
-                n_i[nm] = m.decode(apply(x, idx, ratio), neg_msg)
+            for nm, idx, ratio in active:
+                if args.suite == "paper":
+                    p_i[nm] = m.decode(pa.apply(nm, y), msg)
+                    n_i[nm] = m.decode(pa.apply(nm, x), neg_msg)
+                else:
+                    p_i[nm] = m.decode(apply(y, idx, ratio), msg)
+                    n_i[nm] = m.decode(apply(x, idx, ratio), neg_msg)
             for nm in p_i:
                 pos[nm].append(p_i[nm])
                 neg[nm].append(n_i[nm])
