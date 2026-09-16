@@ -536,6 +536,44 @@ The set is exactly balanced by construction, which does not actually matter:
 TPR and FPR are each computed within one class, so prevalence cancels. It would
 matter for classification accuracy, precision or F1, none of which are reported.
 
+### FINAL RESULTS (2026-09-16): 43024 of 43135 clip evaluations, 99.7%
+
+Acc / AUC, averaged over the four corpora, from
+`results/evals/distortion_comparison_exact1pct.tex`:
+
+| distortion | **RT-SW** | AudioSeal | WavMark | Timbre | SilentCipher |
+| --- | --- | --- | --- | --- | --- |
+| none | 0.974 / .992 | 1.000 / 1.000 | 1.000 / 1.000 | 1.000 / .999 | 0.998 / .998 |
+| resample 8k | 0.932 / .971 | 1.000 / 1.000 | 1.000 / 1.000 | 1.000 / 1.000 | 0.843 / .857 |
+| median filter | 0.940 / .976 | 1.000 / 1.000 | 0.999 / 1.000 | 1.000 / .999 | 0.981 / .983 |
+| low-pass 4k | 0.933 / .972 | 1.000 / 1.000 | 1.000 / 1.000 | 1.000 / 1.000 | 0.883 / .893 |
+| high-pass 500 | 0.966 / .987 | 1.000 / 1.000 | 1.000 / 1.000 | 1.000 / 1.000 | 0.964 / .968 |
+| reencode | 0.974 / .992 | 1.000 / 1.000 | 1.000 / 1.000 | 1.000 / .999 | 0.998 / .998 |
+| compression | 0.967 / .989 | 1.000 / 1.000 | 1.000 / 1.000 | 1.000 / 1.000 | 0.997 / .998 |
+| noise suppression | 0.925 / .963 | 0.998 / 1.000 | 0.978 / .981 | 0.998 / .998 | 0.870 / .894 |
+| **phone call** | **0.900 / .956** | 0.535 / .581 | 0.500 / .500 | 0.780 / .908 | 0.499 / .498 |
+| **Gaussian noise** | 0.609 / .681 | 0.789 / .942 | 0.500 / .500 | 0.874 / .955 | 0.501 / .506 |
+
+Per-method coverage 8578-8625 of 8627; the shortfall is clips the distortion
+chain rejected, and because the order is shuffled that is an unbiased reduction
+in N, not a bias.
+
+**The telephony row is the result.** RT-SW holds AUC 0.956 where AudioSeal
+(.581), WavMark (.500) and SilentCipher (.498) are at chance. Timbre's AUC
+.908 looks competitive but its TPR at 1% FPR is **0.094** against RT-SW's
+0.528 -- it ranks watermarked clips well and still cannot detect them at a
+usable threshold. RT-SW is also the only causal/streaming method here; the
+others get unrestricted lookahead over the whole utterance.
+
+**Gaussian noise is the honest counterweight**: RT-SW .681 against Timbre .955
+at the *same* 10-bit payload, so it is a real robustness gap, not a payload
+artefact.
+
+**WavMark's 0.500 entries are sync failure, not 50% bit accuracy.** Every
+positive scores exactly 8/16, identical to the negatives, because
+`decode_watermark` returns None and the wrapper maps that to 0.5. Worth a
+footnote in any write-up.
+
 ### The payload-size trap
 
 The statistic is an integer, so attainable FPRs form a ladder whose spacing is
@@ -614,13 +652,18 @@ Cost per clip also scales with clip length -- 44 s for a 4.7 s clip, 98 s for a
   per method by `random_msg()`; drawing 40 bits makes `bits_of_bytes` return
   320 and the comparison fails to broadcast.
 - **Clip order is shuffled** (fixed seed 0, separate from `--seed`) before
-  truncation, because the sorted prefix is one block of speakers. Combined with
-  the 200-clip checkpointing, an interrupted run is a valid smaller-N sample.
-- **The GPU is the bottleneck, not the CPU.** 12 concurrent jobs serialized
-  almost completely (RT-SW 1.1 -> 10 s/clip) for ~20% aggregate gain. Use 3.
-- **WavMark costs ~15 s/clip**, 20x RT-SW, because its decode is a 0.1 s-shift
-  sliding sync search. `decode_batch_size` does not help (10 -> 400 was
-  *slower*, identical accuracy).
+  truncation, because the sorted prefix is one block of speakers. Runs
+  checkpoint every 50 clips and **resume** from `scanned`, so an interruption
+  costs at most 50 clips rather than the whole run.
+- **Concurrency: 12 workers is fine once the plan cache is capped.** An
+  earlier note here said the GPU serialized at 12 workers and to use 3. That
+  was the wrong diagnosis -- the card was full of cuFFT plans, not busy. With
+  `cufft_plan_cache.max_size = 16`, twelve workers sit at ~14 GB. The real
+  limit is per-method: WavMark specifically does not parallelise (above).
+- **WavMark's per-clip cost is 65-330 s, not the ~15 s an early probe on four
+  short clips suggested.** It scales with clip length and degrades sharply with
+  concurrency. `decode_batch_size` does not help (10 -> 400 was *slower*,
+  identical accuracy).
 - **Two environments.** RT-SW needs `timbrewm` conda; the baselines need
   `/data/yizwen/.venv-wm`. `pesq` was installed into both on 2026-09-14.
 - **RT-SW needs `conv2_mel_modules.py` at `1add787`** to load `rohklsax`
@@ -633,11 +676,22 @@ SNR is `10*log10(mean(x^2)/mean((y-x)^2))`, the same definition `evaluate.py`
 uses. PESQ is ITU-T P.862 wideband, defined only at 16 kHz, so SilentCipher's
 44.1 kHz signals are resampled for PESQ alone; SNR stays native.
 
-First figures (LibriSpeech-dev): SilentCipher 48.9 dB / 4.55, RT-SW 38.8 /
-4.12, WavMark 35.9 / 3.95, Timbre 27.0 / 3.59, AudioSeal 26.4 / **4.31**.
-AudioSeal is why SNR alone is not enough -- it has the worst SNR and the second
-best PESQ, because it shapes the watermark perceptually rather than minimising
-its energy.
+Final, all five methods x four corpora, ~43k clips:
+
+| method | payload | SNR dB | PESQ |
+| --- | --- | --- | --- |
+| SilentCipher | 40 | 49.01 | 4.590 |
+| **RT-SW** | 10 | **40.22** | 4.163 |
+| WavMark | 16 | 36.61 | 4.154 |
+| Timbre | 10 | 27.47 | 3.697 |
+| AudioSeal | 16 | 27.26 | **4.426** |
+
+AudioSeal is why SNR alone is not enough -- worst SNR, second best PESQ,
+because it shapes the watermark perceptually rather than minimising its energy.
+Timbre has essentially the same SNR (27.47 vs 27.26) and much worse PESQ
+(3.697 vs 4.426), so those two are *not* equally audible. SilentCipher's lead
+is partly a chosen operating point: `message_sdr` is 47 dB in its checkpoint,
+and it carries 4x RT-SW's payload.
 
 RT-SW's measured 38.82 dB (dev) and 40.89 dB (LJSpeech) match the 38.97 and
 40.80 recorded for this checkpoint above, which validates the measurement.
