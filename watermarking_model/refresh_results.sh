@@ -13,16 +13,30 @@ rc=$?
   echo "Generated $(date -Is)"
   echo "Sample sizes and completion state:"
   $PY - <<'PYEOF'
-import numpy as np, glob, os, re
-DS = ['LibriSpeech-dev','LJSpeech','clone_xspeaker','resynth_hifigan']
+import numpy as np, glob, os, re, collections
+# Report MERGED totals per (method, corpus). A corpus may be split across
+# <Method>_<Corpus>__shardN.npz files; listing them separately made WavMark's
+# 2700-clip LJSpeech read as 1375.
+DS = ['LibriSpeech-dev', 'LJSpeech', 'clone_xspeaker', 'resynth_hifigan']
+TOT = {'LibriSpeech-dev': 2303, 'LJSpeech': 2700,
+       'clone_xspeaker': 1624, 'resynth_hifigan': 2000}
 for kind in ("detect", "imp"):
     print(f"  [{kind}]")
+    agg = collections.defaultdict(lambda: [0, 0, True])   # used, shards, complete
     for f in sorted(glob.glob(f"results/{kind}/*.npz")):
-        b = os.path.basename(f)[:-4]
-        if not re.match(r'^(.*)_(%s)$' % '|'.join(map(re.escape, DS)), b): continue
+        b = re.sub(r"__shard\d+$", "", os.path.basename(f)[:-4])
+        m = re.match(r"^(.*)_(%s)$" % "|".join(map(re.escape, DS)), b)
+        if not m:
+            continue
         d = np.load(f)
-        print(f"    {b:<34} n={int(d['used']):>5}  "
-              f"{'complete' if bool(d['complete']) else 'PARTIAL'}")
+        e = agg[(m.group(1), m.group(2))]
+        e[0] += int(d["used"]); e[1] += 1
+        e[2] = e[2] and bool(d["complete"])
+    for (meth, ds), (used, nsh, done) in sorted(agg.items()):
+        tot = TOT[ds]
+        shards = f", {nsh} shards" if nsh > 1 else ""
+        state = "complete" if done and used >= tot * 0.97 else "PARTIAL"
+        print(f"    {meth}_{ds:<20} n={used:>5}/{tot:<5} {state}{shards}")
 PYEOF
   for f in distortion_comparison_exact1pct.tex distortion_comparison.tex imperceptibility.tex; do
     echo; echo "================================================================"

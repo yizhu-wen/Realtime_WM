@@ -1,47 +1,47 @@
-Generated 2026-09-16T05:49:13-04:00
+Generated 2026-09-16T14:00:12-04:00
 Sample sizes and completion state:
   [detect]
-    AudioSeal_LJSpeech                 n= 2697  complete
-    AudioSeal_LibriSpeech-dev          n= 2279  complete
-    AudioSeal_clone_xspeaker           n= 1615  complete
-    AudioSeal_resynth_hifigan          n= 2000  complete
-    RTSW_LJSpeech                      n= 2690  complete
-    RTSW_LibriSpeech-dev               n= 2287  complete
-    RTSW_clone_xspeaker                n= 1611  complete
-    RTSW_resynth_hifigan               n= 1990  complete
-    SilentCipher_LJSpeech              n= 2150  complete
-    SilentCipher_LibriSpeech-dev       n= 1894  complete
-    SilentCipher_clone_xspeaker        n= 1624  complete
-    SilentCipher_resynth_hifigan       n= 2000  complete
-    Timbre_LJSpeech                    n= 2690  complete
-    Timbre_LibriSpeech-dev             n= 2295  complete
-    Timbre_clone_xspeaker              n= 1624  complete
-    Timbre_resynth_hifigan             n= 2000  complete
-    WavMark_LJSpeech                   n= 1375  complete
-    WavMark_LibriSpeech-dev            n= 1175  complete
-    WavMark_clone_xspeaker             n= 1622  complete
-    WavMark_resynth_hifigan            n= 1650  complete
+    AudioSeal_LJSpeech             n= 2697/2700  complete
+    AudioSeal_LibriSpeech-dev      n= 2279/2303  complete
+    AudioSeal_clone_xspeaker       n= 1615/1624  complete
+    AudioSeal_resynth_hifigan      n= 2000/2000  complete
+    RTSW_LJSpeech             n= 2690/2700  complete
+    RTSW_LibriSpeech-dev      n= 2287/2303  complete
+    RTSW_clone_xspeaker       n= 1611/1624  complete
+    RTSW_resynth_hifigan      n= 1990/2000  complete
+    SilentCipher_LJSpeech             n= 2700/2700  complete, 3 shards
+    SilentCipher_LibriSpeech-dev      n= 2297/2303  complete, 3 shards
+    SilentCipher_clone_xspeaker       n= 1624/1624  complete
+    SilentCipher_resynth_hifigan      n= 2000/2000  complete
+    Timbre_LJSpeech             n= 2690/2700  complete
+    Timbre_LibriSpeech-dev      n= 2295/2303  complete
+    Timbre_clone_xspeaker       n= 1624/1624  complete
+    Timbre_resynth_hifigan      n= 2000/2000  complete
+    WavMark_LJSpeech             n= 2700/2700  complete, 8 shards
+    WavMark_LibriSpeech-dev      n= 2303/2303  complete, 8 shards
+    WavMark_clone_xspeaker       n= 1622/1624  complete
+    WavMark_resynth_hifigan      n= 2000/2000  complete, 3 shards
   [imp]
-    AudioSeal_LJSpeech                 n= 2700  complete
-    AudioSeal_LibriSpeech-dev          n= 2303  complete
-    AudioSeal_clone_xspeaker           n= 1624  complete
-    AudioSeal_resynth_hifigan          n= 2000  complete
-    RTSW_LJSpeech                      n= 2690  complete
-    RTSW_LibriSpeech-dev               n= 2287  complete
-    RTSW_clone_xspeaker                n= 1611  complete
-    RTSW_resynth_hifigan               n= 1990  complete
-    SilentCipher_LJSpeech              n= 2700  complete
-    SilentCipher_LibriSpeech-dev       n= 2303  complete
-    SilentCipher_clone_xspeaker        n= 1624  complete
-    SilentCipher_resynth_hifigan       n= 2000  complete
-    Timbre_LJSpeech                    n= 2700  complete
-    Timbre_LibriSpeech-dev             n= 2303  complete
-    Timbre_clone_xspeaker              n= 1624  complete
-    Timbre_resynth_hifigan             n= 2000  complete
-    WavMark_LJSpeech                   n= 2700  complete
-    WavMark_LibriSpeech-dev            n= 2303  complete
-    WavMark_clone_xspeaker             n= 1624  complete
-    WavMark_resynth_hifigan            n= 2000  complete
+    AudioSeal_LJSpeech             n= 2700/2700  complete
+    AudioSeal_LibriSpeech-dev      n= 2303/2303  complete
+    AudioSeal_clone_xspeaker       n= 1624/1624  complete
+    AudioSeal_resynth_hifigan      n= 2000/2000  complete
+    RTSW_LJSpeech             n= 2690/2700  complete
+    RTSW_LibriSpeech-dev      n= 2287/2303  complete
+    RTSW_clone_xspeaker       n= 1611/1624  complete
+    RTSW_resynth_hifigan      n= 1990/2000  complete
+    SilentCipher_LJSpeech             n= 2700/2700  complete
+    SilentCipher_LibriSpeech-dev      n= 2303/2303  complete
+    SilentCipher_clone_xspeaker       n= 1624/1624  complete
+    SilentCipher_resynth_hifigan      n= 2000/2000  complete
+    Timbre_LJSpeech             n= 2700/2700  complete
+    Timbre_LibriSpeech-dev      n= 2303/2303  complete
+    Timbre_clone_xspeaker       n= 1624/1624  complete
+    Timbre_resynth_hifigan      n= 2000/2000  complete
+    WavMark_LJSpeech             n= 2700/2700  complete
+    WavMark_LibriSpeech-dev      n= 2303/2303  complete
+    WavMark_clone_xspeaker       n= 1624/1624  complete
+    WavMark_resynth_hifigan      n= 2000/2000  complete
 
 ================================================================
   distortion_comparison_exact1pct.tex
