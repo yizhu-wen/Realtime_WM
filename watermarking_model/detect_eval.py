@@ -207,6 +207,10 @@ def main():
     ap.add_argument("--ckpt", default="")
     ap.add_argument("--dataset", required=True, choices=list(DATASETS))
     ap.add_argument("--n_items", type=int, default=0, help="0 = all")
+    ap.add_argument("--start", type=int, default=0,
+                    help="first clip index to score (shard lower bound)")
+    ap.add_argument("--stop", type=int, default=0,
+                    help="one past the last clip index; 0 = to the end")
     ap.add_argument("--out", required=True)
     ap.add_argument("--seed", type=int, default=1234)
     args = ap.parse_args()
@@ -270,6 +274,16 @@ def main():
     print(f"{m.name} / {args.dataset}: {len(clips)} clips, sr {m.sr}, {m.n_bits} bits",
           flush=True)
 
+    # Shard bounds. One process per corpus leaves most of the machine idle
+    # once only a few corpora remain: five workers at 98% of one core each,
+    # with nineteen cores free. Disjoint index ranges over the same shuffled
+    # list let several processes share a corpus; detect_report merges them.
+    lo = args.start
+    hi = args.stop if args.stop else len(clips)
+    sharded = lo != 0 or args.stop != 0
+    if sharded:
+        print(f"  shard: clips [{lo}, {hi})", flush=True)
+
     names = [d[0] for d in DISTORTIONS]
     pos = {n: [] for n in names}
     neg = {n: [] for n in names}
@@ -313,6 +327,8 @@ def main():
         return np.ascontiguousarray(y)
 
     for i, f in enumerate(clips):
+        if i < lo or i >= hi:
+            continue
         if i < start:
             continue
         try:

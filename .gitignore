@@ -344,3 +344,6 @@ watermarking_model/results/evals/*
 # raw per-utterance evaluation scores
 watermarking_model/results/detect/
 watermarking_model/results/imp/
+
+# per-run checkpoint backups
+watermarking_model/results/detect_backup/

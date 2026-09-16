@@ -169,41 +169,55 @@ def cell(pos, neg, n_bits, thr, rand=None, seed=0):
 
 
 def load(indir):
-    """{method: {dataset: {'pos'/'neg': {row: array}, 'n_bits': int}}}"""
-    data = {}
+    """{method: {dataset: {'pos'/'neg': {row: array}, 'n_bits': int}}}
+
+    A corpus may be split across several files. One process per corpus leaves
+    most of the machine idle once only a few corpora remain -- five workers at
+    98% of one core each with nineteen cores free -- so a corpus can be sharded
+    over disjoint clip ranges. Shards are named
+    ``<Method>_<Corpus>__shardN.npz``; because their clips are disjoint,
+    concatenating them reproduces the whole-corpus result exactly.
+    """
+    parts = {}
     for f in sorted(glob.glob(os.path.join(indir, "*.npz"))):
         base = os.path.basename(f)[:-4]
         if base.startswith("_"):
             continue
+        base = re.sub(r"__shard\d+$", "", base)
         m = re.match(r"^(.*)_(%s)$" % "|".join(map(re.escape, DATASETS)), base)
         if not m:
             print(f"  skipping unrecognised {base}")
             continue
         ds = m.group(2)
         d = np.load(f, allow_pickle=True)
-        # the display name lives in the file; the filename uses the CLI key
-        # ("RTSW" vs "RT-SW"), so trust the file
         meth = str(d["method"])
-        if not bool(d.get("complete", True)):
-            print(f"  {meth}/{ds}: partial, {int(d['used'])} clips so far")
-        # Guard against a ragged file written before the per-clip commit was
-        # made atomic: truncate every series to the shortest so the positive
-        # and negative at index i still come from the same clip.
         lens = [len(d[f"{w}_{k}"]) for _, k in ROWS
                 for w in ("pos", "neg") if f"{w}_{k}" in d]
         k_min = min(lens) if lens else 0
         if lens and max(lens) != k_min:
-            print(f"  {meth}/{ds}: ragged ({k_min}..{max(lens)}), "
-                  f"truncating to {k_min}")
-        data.setdefault(meth, {})[ds] = dict(
-            n_bits=int(d["n_bits"]), used=int(d["used"]),
-            pos={k: d[f"pos_{k}"][:k_min] for _, k in ROWS if f"pos_{k}" in d},
-            neg={k: d[f"neg_{k}"][:k_min] for _, k in ROWS if f"neg_{k}" in d},
-        )
+            print(f"  {meth}/{ds}: ragged ({k_min}..{max(lens)}), truncating")
+        complete = bool(d["complete"]) if "complete" in d.files else True
+        parts.setdefault((meth, ds), []).append((
+            int(d["n_bits"]), complete,
+            {k: d[f"pos_{k}"][:k_min] for _, k in ROWS if f"pos_{k}" in d},
+            {k: d[f"neg_{k}"][:k_min] for _, k in ROWS if f"neg_{k}" in d}))
+
+    data = {}
+    for (meth, ds), chunks in parts.items():
+        n_bits = chunks[0][0]
+        pos = {k: np.concatenate([c[2][k] for c in chunks if k in c[2]])
+               for _, k in ROWS if any(k in c[2] for c in chunks)}
+        neg = {k: np.concatenate([c[3][k] for c in chunks if k in c[3]])
+               for _, k in ROWS if any(k in c[3] for c in chunks)}
+        used = len(next(iter(pos.values()))) if pos else 0
+        if len(chunks) > 1:
+            print(f"  {meth}/{ds}: merged {len(chunks)} shards -> {used} clips")
+        elif not chunks[0][1]:
+            print(f"  {meth}/{ds}: partial, {used} clips so far")
+        data.setdefault(meth, {})[ds] = dict(n_bits=n_bits, used=used,
+                                             pos=pos, neg=neg)
     return data
 
-
-# ------------------------------------------------------------------ workbook
 
 HDR = ["distortion", "n", "bit_acc", "acc_std", "acc_sem", "acc_ci_lo",
        "acc_ci_hi", "auc", "auc_ci_lo", "auc_ci_hi", "tpr", "tpr_ci_lo",
