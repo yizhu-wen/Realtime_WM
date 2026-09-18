@@ -50,7 +50,9 @@ DL_ROWS = [
     ("Phone Call", "phone_call"),
 ]
 
-# The 12 attacks kept from the AudioSeal / Timbre / SilentCipher suites.
+# The attacks reported from the AudioSeal / Timbre / SilentCipher suites.
+# pink_noise and time_jitter are scored and stored in the npz but not reported;
+# drop them from this list to restore them.
 PAPER_ROWS = [
     ("Boost", "boost"),
     ("Duck", "duck"),
@@ -58,10 +60,8 @@ PAPER_ROWS = [
     ("MP3 128 kbps", "mp3_128"),
     ("AAC 64 kbps", "aac_64"),
     ("AAC 128 kbps", "aac_128"),
-    ("Pink Noise", "pink_noise"),
     ("Crop End", "crop_end"),
     ("Ogg Vorbis", "ogg"),
-    ("Time Jitter", "time_jitter"),
     ("Speech Mix (-15 dB)", "speech_mix_-15dB"),
     ("Sample Suppression", "sample_suppress"),
 ]
