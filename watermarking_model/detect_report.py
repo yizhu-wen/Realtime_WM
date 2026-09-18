@@ -441,7 +441,7 @@ def write_imp_tex(path, imp, thresholds):
         snr = np.mean([x["snr"]["mean"] for x in st])
         pq = np.mean([x["pesq"]["mean"] for x in st])
         nb = thresholds.get(meth, {}).get("n_bits") or PAYLOAD.get(meth, "--")
-        lines.append(f"{meth} & {nb} & {snr:.2f} & {pq:.3f} " + r"\\")
+        lines.append(f"{meth}{' (ours)' if meth == 'RT-SW' else ''} & {nb} & {snr:.2f} & {pq:.3f} " + r"\\")
     open(path, "w").write(IMP_TEX + "\n".join(lines) +
                           "\n\\bottomrule\n\\end{tabular}\n\\end{table}\n")
 
@@ -465,7 +465,7 @@ and false-positive rates, and AUC denotes the area under the ROC curve.
 \resizebox{\textwidth}{!}{
 \begin{tabular}{l ccc ccc ccc ccc ccc}
 \toprule
-& \multicolumn{3}{c}{\textbf{RT-SW}}
+& \multicolumn{3}{c}{\textbf{RT-SW (ours)}}
 & \multicolumn{3}{c}{\textbf{AudioSeal}}
 & \multicolumn{3}{c}{\textbf{WavMark}}
 & \multicolumn{3}{c}{\textbf{Timbre}}
