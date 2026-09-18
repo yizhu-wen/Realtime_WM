@@ -117,11 +117,9 @@ def write_aux_style(path, rows_all, data, thr, payload, nd=3):
         rej = lambda x: float(np.mean(x >= t) + g * np.mean(x == t - 1))
         return p.mean() / nb, rej(p), rej(n), auc_exact(p, n, nb)
 
-    body, totals = [], {m: [] for m in METHODS}
+    body = []
     for label, k in rows_all:
         vals = {m: cell(m, k) for m in METHODS if k in data.get(m, {})}
-        for m, v in vals.items():
-            totals[m].append(v)
         best = max(v[0] for v in vals.values())
         strict = sum(1 for v in vals.values() if v[0] >= best - 1e-9) == 1
         cells = []
@@ -133,20 +131,8 @@ def write_aux_style(path, rows_all, data, thr, payload, nd=3):
             cells.append(f"{b}{a:.{nd}f} \\aux{{{tp:.{nd}f}/{fp:.{nd}f}}} & {b}{au:.{nd}f}")
         body.append(f"        {label} & " + " & ".join(cells) + r" \\")
 
-    avg = {m: tuple(np.mean([v[i] for v in totals[m]]) for i in range(4))
-           for m in METHODS if totals[m]}
-    best = max(v[0] for v in avg.values())
-    strict = sum(1 for v in avg.values() if v[0] >= best - 1e-9) == 1
-    cells = []
-    for m in METHODS:
-        a, tp, fp, au = avg[m]
-        b = r"\bf " if (strict and a >= best - 1e-9) else ""
-        cells.append(f"{b}{a:.{nd}f} \\aux{{{tp:.{nd}f}/{fp:.{nd}f}}} & {b}{au:.{nd}f}")
-    body.append(r"        \midrule")
-    body.append("        Average & " + " & ".join(cells) + r" \\")
-
     open(path, "w").write(AUX_TEX + "\n".join(body) + "\n" + AUX_TAIL)
-    print(f"wrote {path}  ({len(rows_all)} rows + average)")
+    print(f"wrote {path}  ({len(rows_all)} rows)")
 
 
 def main():
