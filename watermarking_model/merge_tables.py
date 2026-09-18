@@ -67,6 +67,88 @@ def auc_exact(pos, neg, nb):
         / (hp.sum() * hn.sum())
 
 
+
+
+AUX_TEX = r"""% put this in your preamble
+\newcommand{\aux}[1]{{\scriptsize{\textcolor{gray}{#1}}}}
+
+\begin{table*}[t]
+    \centering
+    \caption{
+        Decoding evaluation results under different audio distortions.
+        Acc. (\aux{TPR/FPR}) is the bit accuracy (and the true- and
+        false-positive rates at a threshold calibrated to a 1\% false-positive
+        rate on the pooled negatives). AUC is the area under the ROC curve.
+    }
+    \label{tab:wm_robustness}
+    \vspace{4pt}
+    \resizebox{1.0\linewidth}{!}{
+        \begin{tabular}{l *{2}{l} *{2}{l} *{2}{l} *{2}{l} *{2}{l}}
+        \toprule
+        & \multicolumn{2}{l}{\textbf{RT-SW (Ours)}}
+        & \multicolumn{2}{l}{\textbf{AudioSeal}}
+        & \multicolumn{2}{l}{\textbf{WavMark}}
+        & \multicolumn{2}{l}{\textbf{Timbre}}
+        & \multicolumn{2}{l}{\textbf{SilentCipher}} \\
+        \cmidrule(rr){2-3} \cmidrule(rr){4-5} \cmidrule(rr){6-7} \cmidrule(rr){8-9} \cmidrule(rr){10-11}
+        \multicolumn{1}{c}{Distortion}
+        & Acc. \aux{TPR/FPR} & AUC & Acc. \aux{TPR/FPR} & AUC
+        & Acc. \aux{TPR/FPR} & AUC & Acc. \aux{TPR/FPR} & AUC
+        & Acc. \aux{TPR/FPR} & AUC \\
+        \cmidrule(rr){1-1} \cmidrule(rr){2-3} \cmidrule(rr){4-5} \cmidrule(rr){6-7} \cmidrule(rr){8-9} \cmidrule(rr){10-11}
+"""
+
+AUX_TAIL = r"""        \bottomrule
+        \end{tabular}
+    }
+    \vspace{-0.2cm}
+\end{table*}
+"""
+
+
+def write_aux_style(path, rows_all, data, thr, payload, nd=3):
+    """AudioSeal-style layout: Acc with TPR/FPR as small grey \aux text, one
+    AUC column per method, the strict per-row winner in bold, and an average
+    row. Bolding is skipped on ties, which are common here because three
+    baselines sit at 1.000 on most rows."""
+    def cell(meth, k):
+        p, n = data[meth][k]
+        t, g, nb = thr[meth]
+        rej = lambda x: float(np.mean(x >= t) + g * np.mean(x == t - 1))
+        return p.mean() / nb, rej(p), rej(n), auc_exact(p, n, nb)
+
+    body, totals = [], {m: [] for m in METHODS}
+    for label, k in rows_all:
+        vals = {m: cell(m, k) for m in METHODS if k in data.get(m, {})}
+        for m, v in vals.items():
+            totals[m].append(v)
+        best = max(v[0] for v in vals.values())
+        strict = sum(1 for v in vals.values() if v[0] >= best - 1e-9) == 1
+        cells = []
+        for m in METHODS:
+            if m not in vals:
+                cells.append("-- & --"); continue
+            a, tp, fp, au = vals[m]
+            b = r"\bf " if (strict and a >= best - 1e-9) else ""
+            cells.append(f"{b}{a:.{nd}f} \\aux{{{tp:.{nd}f}/{fp:.{nd}f}}} & {b}{au:.{nd}f}")
+        body.append(f"        {label} & " + " & ".join(cells) + r" \\")
+
+    avg = {m: tuple(np.mean([v[i] for v in totals[m]]) for i in range(4))
+           for m in METHODS if totals[m]}
+    best = max(v[0] for v in avg.values())
+    strict = sum(1 for v in avg.values() if v[0] >= best - 1e-9) == 1
+    cells = []
+    for m in METHODS:
+        a, tp, fp, au = avg[m]
+        b = r"\bf " if (strict and a >= best - 1e-9) else ""
+        cells.append(f"{b}{a:.{nd}f} \\aux{{{tp:.{nd}f}/{fp:.{nd}f}}} & {b}{au:.{nd}f}")
+    body.append(r"        \midrule")
+    body.append("        Average & " + " & ".join(cells) + r" \\")
+
+    open(path, "w").write(AUX_TEX + "\n".join(body) + "\n" + AUX_TAIL)
+    print(f"wrote {path}  ({len(rows_all)} rows + average)")
+
+
 def main():
     payload = {"RT-SW": 10, "AudioSeal": 16, "WavMark": 16,
                "Timbre": 10, "SilentCipher": 40}
@@ -116,6 +198,8 @@ def main():
     out = "results/evals/distortion_comparison_exact1pct_combined.tex"
     open(out, "w").write(TEX_HEAD + "\n\n".join(lines) + TEX_TAIL)
     print(f"\nwrote {out}  ({len(rows_all)} rows)")
+    write_aux_style("results/evals/distortion_comparison_aux_style.tex",
+                    rows_all, data, thr, payload)
     return rows_all, data, thr, payload
 
 
