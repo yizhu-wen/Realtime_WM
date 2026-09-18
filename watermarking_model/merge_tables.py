@@ -24,6 +24,14 @@ from detect_report import (DL_ROWS, PAPER_ROWS, METHODS, DATASETS,  # noqa: E402
 
 SUITES = [("results/detect", DL_ROWS), ("results/detect_paper", PAPER_ROWS)]
 
+# Rows scored and stored, but not reported in the combined table. Removing a
+# name here restores it; nothing needs re-running.
+EXCLUDE = {"gaussian_noise_20", "speech_mix_-15dB", "duck", "boost",
+           "resample_8k"}
+
+# Rows forced to the end, in this order.
+LAST = ["phone_call"]
+
 
 def load_suite(indir, rows):
     """{method: {row: (pos, neg)}} with shards merged and corpora pooled."""
@@ -65,11 +73,16 @@ def main():
     data, rows_all = {}, []
     for indir, rows in SUITES:
         s = load_suite(indir, rows)
-        present = [r for r in rows if any(r[1] in s.get(m, {}) for m in METHODS)]
+        present = [r for r in rows if r[1] not in EXCLUDE
+                   and any(r[1] in s.get(m, {}) for m in METHODS)]
         rows_all += present
         for meth, byrow in s.items():
             data.setdefault(meth, {}).update(byrow)
         print(f"  {indir}: {len(present)} rows, {len(s)} methods")
+
+    # phone call reads as the conclusion of the table, so it goes last
+    rows_all = ([r for r in rows_all if r[1] not in LAST]
+                + [r for k in LAST for r in rows_all if r[1] == k])
 
     lines = []
     thr = {}
