@@ -57,10 +57,9 @@ PAPER_ROWS = [
     ("Boost", "boost"),
     ("Duck", "duck"),
     ("MP3 64 kbps", "mp3_64"),
-    ("MP3 128 kbps", "mp3_128"),
     ("AAC 64 kbps", "aac_64"),
-    ("AAC 128 kbps", "aac_128"),
-    ("Crop End", "crop_end"),
+    # the attack is crop_end: the final 10% of samples are removed
+    ("Cropping", "crop_end"),
     ("Ogg Vorbis", "ogg"),
     ("Speech Mix (-15 dB)", "speech_mix_-15dB"),
     ("Sample Suppression", "sample_suppress"),
