@@ -37,7 +37,7 @@ import numpy as np
 from sklearn.metrics import roc_auc_score
 
 # Display name -> key used by detect_eval, in table order.
-ROWS = [
+DL_ROWS = [
     ("No Distortion", "none"),
     ("Resample (8k)", "resample_8k"),
     ("Gaussian Noise", "gaussian_noise_20"),
@@ -49,6 +49,42 @@ ROWS = [
     ("Noise Suppression", "noise_suppression"),
     ("Phone Call", "phone_call"),
 ]
+
+# The 12 attacks kept from the AudioSeal / Timbre / SilentCipher suites.
+PAPER_ROWS = [
+    ("Boost", "boost"),
+    ("Duck", "duck"),
+    ("MP3 64 kbps", "mp3_64"),
+    ("MP3 128 kbps", "mp3_128"),
+    ("AAC 64 kbps", "aac_64"),
+    ("AAC 128 kbps", "aac_128"),
+    ("Pink Noise", "pink_noise"),
+    ("Crop End", "crop_end"),
+    ("Ogg Vorbis", "ogg"),
+    ("Time Jitter", "time_jitter"),
+    ("Speech Mix (-15 dB)", "speech_mix_-15dB"),
+    ("Sample Suppression", "sample_suppress"),
+]
+
+# Which suite a results directory holds is discoverable from the files
+# themselves, so the report does not need to be told.
+ROWS = DL_ROWS
+
+
+def select_rows(indir):
+    """Pick the row set matching the scores actually present."""
+    global ROWS
+    import glob as _g
+    for f in sorted(_g.glob(os.path.join(indir, "*.npz"))):
+        keys = set(np.load(f, allow_pickle=True).files)
+        for name, rows in (("paper", PAPER_ROWS), ("dl", DL_ROWS)):
+            if all(f"pos_{k}" in keys for _, k in rows):
+                ROWS = rows
+                print(f"  distortion suite: {name} ({len(rows)} rows)")
+                return rows
+    raise SystemExit(f"{indir}: no npz matches either known distortion suite")
+
+
 METHODS = ["RT-SW", "AudioSeal", "WavMark", "Timbre", "SilentCipher"]
 # payload each detector recovers; the imperceptibility table needs these
 # even before the matching detection run exists
@@ -495,6 +531,7 @@ def main():
                     help="which operating point the LaTeX TPR/FPR column uses")
     args = ap.parse_args()
 
+    select_rows(args.indir)
     data = load(args.indir)
     imp = load_imp(args.impdir) if args.impdir and os.path.isdir(args.impdir) else {}
     if not data:
