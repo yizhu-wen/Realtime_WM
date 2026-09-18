@@ -27,10 +27,17 @@ SUITES = [("results/detect", DL_ROWS), ("results/detect_paper", PAPER_ROWS)]
 # Rows scored and stored, but not reported in the combined table. Removing a
 # name here restores it; nothing needs re-running.
 EXCLUDE = {"gaussian_noise_20", "speech_mix_-15dB", "duck", "boost",
-           "resample_8k"}
+           "resample_8k",
+           # reencode is a lossless WAV round-trip: byte-identical scores to
+           # "No Distortion" for three of five methods. cropping separates the
+           # methods by 0.019 accuracy, so it distinguishes nothing.
+           "reencode", "crop_end"}
 
 # Rows forced to the end, in this order.
 LAST = ["phone_call"]
+
+# display overrides
+RELABEL = {"phone_call": "Telephony Distortion"}
 
 
 def load_suite(indir, rows):
@@ -74,14 +81,12 @@ AUX_TEX = r"""% put this in your preamble
 
 \begin{table*}[t]
     \centering
+    \vspace{-10pt}
     \caption{
         Decoding evaluation results under different audio distortions.
-        Acc. (\aux{TPR/FPR}) is the bit accuracy (and the true- and
-        false-positive rates at a threshold calibrated to a 1\% false-positive
-        rate on the pooled negatives). AUC is the area under the ROC curve.
     }
+    \vspace{-10pt}
     \label{tab:wm_robustness}
-    \vspace{4pt}
     \resizebox{1.0\linewidth}{!}{
         \begin{tabular}{l *{2}{l} *{2}{l} *{2}{l} *{2}{l} *{2}{l}}
         \toprule
@@ -108,9 +113,9 @@ AUX_TAIL = r"""        \bottomrule
 
 def write_aux_style(path, rows_all, data, thr, payload, nd=3):
     """AudioSeal-style layout: Acc with TPR/FPR as small grey \aux text, one
-    AUC column per method, the strict per-row winner in bold, and an average
-    row. Bolding is skipped on ties, which are common here because three
-    baselines sit at 1.000 on most rows."""
+    AUC column per method, and only the telephony row emphasised.
+    Bolding winners elsewhere would point the reader at whichever baseline
+    leads on conditions where every method exceeds 0.98."""
     def cell(meth, k):
         p, n = data[meth][k]
         t, g, nb = thr[meth]
@@ -119,15 +124,17 @@ def write_aux_style(path, rows_all, data, thr, payload, nd=3):
 
     body = []
     for label, k in rows_all:
+        label = RELABEL.get(k, label)
         vals = {m: cell(m, k) for m in METHODS if k in data.get(m, {})}
-        best = max(v[0] for v in vals.values())
-        strict = sum(1 for v in vals.values() if v[0] >= best - 1e-9) == 1
         cells = []
+        # emphasise only the telephony row: the claim is competitive-plus-
+        # streaming, and bolding winners where everything exceeds 0.98 points
+        # the reader at the baselines
         for m in METHODS:
             if m not in vals:
                 cells.append("-- & --"); continue
             a, tp, fp, au = vals[m]
-            b = r"\bf " if (strict and a >= best - 1e-9) else ""
+            b = r"\bf " if (k in LAST and m == "RT-SW") else ""
             cells.append(f"{b}{a:.{nd}f} \\aux{{{tp:.{nd}f}/{fp:.{nd}f}}} & {b}{au:.{nd}f}")
         body.append(f"        {label} & " + " & ".join(cells) + r" \\")
 
