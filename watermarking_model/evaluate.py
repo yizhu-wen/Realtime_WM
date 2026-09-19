@@ -5,7 +5,7 @@ batch maximum, and the encoder writes a watermark into that padding which the
 decoder's mean over the time axis then reads back -- worth ~7-9 accuracy points
 that do not exist at inference on a single utterance.
 
-    python evaluate.py --ckpt results/ckpt/pth/none-conv2_ep_50_....pth.tar
+    python evaluate.py --ckpt checkpoints/rtsw_ep20.pth.tar
 """
 
 import argparse
@@ -27,6 +27,9 @@ from model.conv2_mel_modules import Decoder, Encoder
 
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)
+
+_D = os.environ.get("DATA_ROOT",
+                    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data"))
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -177,9 +180,9 @@ def main():
     ap.add_argument(
         "--flat_dirs",
         default=(
-            "LJSpeech=/data/yizwen/LJSpeech-1.1_wav,"
-            "clone_xspeaker=/data/yizwen/clone_xspeaker_wav,"
-            "resynth_hifigan=/data/yizwen/resynth_hifigan_wav"
+            f"LJSpeech={_D}/LJSpeech-1.1_wav,"
+            f"clone_xspeaker={_D}/clone_xspeaker_wav,"
+            f"resynth_hifigan={_D}/resynth_hifigan_wav"
         ),
         help="comma-separated label=path corpora of loose wavs; '' to skip",
     )

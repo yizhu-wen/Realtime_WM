@@ -328,9 +328,7 @@ wandb_api.txt
 .env
 
 ### Training run artifacts (keep on disk, not in git)
-watermarking_model/results/ckpt/pth/none-conv2_*.pth.tar
-# except the best model (rohklsax, plain hard encoder gate, 20 epochs)
-!watermarking_model/results/ckpt/pth/none-conv2_ep_20_2026-09-11_06_02_42.pth.tar
+watermarking_model/results/ckpt/
 watermarking_model/results/log/
 watermarking_model/results/samples/
 # evaluation outputs: raw per-utterance scores stay out (regenerable,
@@ -341,9 +339,12 @@ watermarking_model/results/evals/*
 !watermarking_model/results/evals/*.txt
 !watermarking_model/results/evals/*.xlsx
 
-# raw per-utterance evaluation scores
-watermarking_model/results/detect/
-watermarking_model/results/imp/
+# Raw per-utterance scores ARE shipped: they let anyone rebuild and check every
+# table without repeating ~24 h of GPU evaluation.
+watermarking_model/results/log/
 
 # per-run checkpoint backups
 watermarking_model/results/detect_backup/
+
+# downloaded corpora
+data/

@@ -40,12 +40,21 @@ DISTORTIONS = [
 ]
 
 REPO = os.path.dirname(os.path.abspath(__file__))
+# Corpus roots. Override the base with DATA_ROOT, or any single corpus with
+# RTSW_<NAME>, e.g. RTSW_LJSpeech=/mnt/corpora/ljspeech_16k.
+DATA_ROOT = os.environ.get("DATA_ROOT", os.path.join(REPO, "..", "data"))
 DATASETS = {
-    "LibriSpeech-dev": "/data/yizwen/LibriSpeech_wav/val",
-    "LJSpeech": "/data/yizwen/LJSpeech-1.1_wav",
-    "clone_xspeaker": "/data/yizwen/clone_xspeaker_wav",
-    "resynth_hifigan": "/data/yizwen/resynth_hifigan_wav",
+    "LibriSpeech-dev": os.path.join(DATA_ROOT, "LibriSpeech_wav", "val"),
+    "LJSpeech":        os.path.join(DATA_ROOT, "LJSpeech-1.1_wav"),
+    "clone_xspeaker":  os.path.join(DATA_ROOT, "clone_xspeaker_wav"),
+    "resynth_hifigan": os.path.join(DATA_ROOT, "resynth_hifigan_wav"),
 }
+DATASETS = {k: os.path.abspath(os.environ.get(f"RTSW_{k}", v))
+            for k, v in DATASETS.items()}
+
+# Wrapper exposing embed(x, rng) / decode(x, msg) for the baseline methods.
+# Only needed when --method is not RTSW.
+BASELINES = os.environ.get("BASELINES_DIR", "/data/yizwen/wm_shift_exp")
 
 
 # ---------------------------------------------------------------- methods
@@ -102,10 +111,10 @@ class RTSWMethod:
 
 
 class BaselineMethod:
-    """Wraps /data/yizwen/wm_shift_exp/methods.py, which returns bitacc."""
+    """Wraps $BASELINES_DIR/methods.py, which returns bitacc."""
 
     def __init__(self, key):
-        sys.path.insert(0, "/data/yizwen/wm_shift_exp")
+        sys.path.insert(0, BASELINES)
         import methods
 
         self.key = key
@@ -137,7 +146,7 @@ def method_sample_rate(method):
     its whole stack)."""
     if method == "RTSW":
         return RTSWMethod.sr
-    sys.path.insert(0, "/data/yizwen/wm_shift_exp")
+    sys.path.insert(0, BASELINES)
     import methods
 
     return methods.ALL[method].sr
