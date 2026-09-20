@@ -7,67 +7,63 @@
 <meta name="description" content="Real-Time Speech Watermarking for Live Voice Communication: Synthetic Speech Provenance and Post-Hoc Recording Attribution">
 <style>
 :root{
-  --bg:#fbfbfd; --fg:#16181d; --muted:#5b6270; --line:#e3e6ec;
-  --card:#fff; --accent:#1f5fd0; --accent-soft:#eaf0fc; --code:#f4f5f8;
-  color-scheme: light;
-}
-@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
-  --bg:#0f1115; --fg:#e8eaef; --muted:#9aa3b2; --line:#252a33;
-  --card:#161a21; --accent:#7aa5f5; --accent-soft:#182236; --code:#1b2029;
-}}
-:root[data-theme="dark"]{
-  --bg:#0f1115; --fg:#e8eaef; --muted:#9aa3b2; --line:#252a33;
-  --card:#161a21; --accent:#7aa5f5; --accent-soft:#182236; --code:#1b2029;
+  --bg:#ffffff; --fg:#14161a; --muted:#565e6b; --line:#e2e5ea;
+  --card:#fbfcfd; --accent:#1f5fd0; --accent-soft:#eaf0fc; --code:#f4f5f8;
+  color-scheme: light;   /* light only: the page ignores the OS dark preference */
 }
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--fg);margin:0;
-  font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font:18px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   -webkit-font-smoothing:antialiased}
-.wrap{max-width:1000px;margin:0 auto;padding:0 20px}
-header{padding:56px 0 34px;border-bottom:1px solid var(--line)}
-h1{font-size:30px;line-height:1.25;margin:0 0 6px;letter-spacing:-.02em}
-.sub{font-size:17px;color:var(--muted);margin:0 0 20px;font-weight:400}
-.authors{font-size:14.5px;margin:0 0 4px}
-.affil{font-size:13px;color:var(--muted);margin:0 0 20px}
-.links{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
-.btn{display:inline-block;padding:8px 15px;border-radius:7px;border:1px solid var(--line);
-  background:var(--card);color:var(--fg);text-decoration:none;font-size:14px;font-weight:500}
+.wrap{max-width:1060px;margin:0 auto;padding:0 22px}
+header{padding:62px 0 38px;border-bottom:1px solid var(--line)}
+h1{font-size:40px;line-height:1.2;margin:0 0 10px;letter-spacing:-.02em}
+.sub{font-size:22px;color:var(--muted);margin:0 0 24px;font-weight:400}
+.authors{font-size:17.5px;margin:0 0 6px}
+.affil{font-size:16px;color:var(--muted);margin:0 0 22px;line-height:1.6}
+.links{display:flex;gap:12px;flex-wrap:wrap;margin-top:20px}
+.btn{display:inline-block;padding:11px 20px;border-radius:8px;border:1px solid var(--line);
+  background:var(--card);color:var(--fg);text-decoration:none;font-size:17px;font-weight:500}
 .btn:hover{border-color:var(--accent);color:var(--accent)}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 .btn.primary:hover{opacity:.9;color:#fff}
-section{padding:40px 0;border-bottom:1px solid var(--line)}
-h2{font-size:21px;margin:0 0 6px;letter-spacing:-.01em}
-h2+.lede{color:var(--muted);margin:0 0 22px;font-size:14.5px}
+section{padding:46px 0;border-bottom:1px solid var(--line)}
+h2{font-size:28px;margin:0 0 8px;letter-spacing:-.01em}
+h2+.lede{color:var(--muted);margin:0 0 24px;font-size:18px}
 figure{margin:0 0 8px}
-figure img{width:100%;height:auto;border-radius:9px;border:1px solid var(--line);background:#fff}
-figcaption{font-size:13px;color:var(--muted);margin-top:9px}
-.tldr{background:var(--accent-soft);border:1px solid var(--line);border-radius:10px;
-  padding:16px 18px;margin:0 0 26px}
-.tldr p{margin:0;font-size:14.5px}
-table{border-collapse:collapse;width:100%;font-size:13.5px}
-th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left}
-th{font-weight:600;color:var(--muted);font-size:12.5px;text-transform:uppercase;letter-spacing:.04em}
+figure img{width:100%;height:auto;border-radius:10px;border:1px solid var(--line);background:#fff}
+figcaption{font-size:16px;color:var(--muted);margin-top:11px;line-height:1.6}
+.tldr{background:var(--accent-soft);border:1px solid var(--line);border-radius:11px;
+  padding:20px 22px;margin:0 0 30px}
+.tldr p{margin:0;font-size:18.5px;line-height:1.65}
+/* description left, figure right, so a wide plot does not dominate the page */
+.split{display:grid;grid-template-columns:1fr 1.05fr;gap:30px;align-items:center}
+.split figure img{max-height:330px;object-fit:contain}
+@media (max-width:760px){ .split{grid-template-columns:1fr;gap:20px} }
+table{border-collapse:collapse;width:100%;font-size:16px}
+th,td{padding:11px 12px;border-bottom:1px solid var(--line);text-align:left}
+th{font-weight:600;color:var(--muted);font-size:14.5px;text-transform:uppercase;letter-spacing:.04em}
 td.num{font-variant-numeric:tabular-nums}
 tr.hl td{background:var(--accent-soft);font-weight:600}
 .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:18px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:15px}
-.card h3{margin:0 0 3px;font-size:15.5px}
-.card .meta{font-size:12.5px;color:var(--muted);margin:0 0 11px;font-variant-numeric:tabular-nums}
-.card audio{width:100%;height:36px;margin-bottom:11px}
-.card img{width:100%;height:auto;border-radius:6px;border:1px solid var(--line);background:#fff;display:block}
-.tabs{display:flex;gap:6px;margin:0 0 14px;flex-wrap:wrap}
-.tab{padding:6px 13px;border-radius:999px;border:1px solid var(--line);background:var(--card);
-  font-size:13px;cursor:pointer;color:var(--fg)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px}
+.card h3{margin:0 0 4px;font-size:19px}
+.card .meta{font-size:15px;color:var(--muted);margin:0 0 13px;font-variant-numeric:tabular-nums}
+.card audio{width:100%;height:40px;margin-bottom:13px}
+.card img{width:100%;height:auto;border-radius:7px;border:1px solid var(--line);background:#fff;display:block}
+.tabs{display:flex;gap:8px;margin:0 0 18px;flex-wrap:wrap}
+.tab{padding:9px 18px;border-radius:999px;border:1px solid var(--line);background:var(--card);
+  font-size:16px;cursor:pointer;color:var(--fg)}
 .tab[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
-.badge{display:inline-block;padding:1px 7px;border-radius:5px;background:var(--accent-soft);
-  color:var(--accent);font-size:11.5px;font-weight:600;margin-left:6px;vertical-align:1px}
-pre{background:var(--code);border:1px solid var(--line);border-radius:8px;padding:13px;
-  overflow-x:auto;font-size:13px;margin:0}
+.badge{display:inline-block;padding:2px 9px;border-radius:6px;background:var(--accent-soft);
+  color:var(--accent);font-size:14px;font-weight:600;margin-left:7px;vertical-align:2px}
+pre{background:var(--code);border:1px solid var(--line);border-radius:9px;padding:16px;
+  overflow-x:auto;font-size:15.5px;line-height:1.6;margin:0}
 code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-footer{padding:30px 0 50px;color:var(--muted);font-size:13px}
+footer{padding:34px 0 56px;color:var(--muted);font-size:16px}
 a{color:var(--accent)}
-.note{font-size:13px;color:var(--muted);margin-top:14px}
+.note{font-size:16px;color:var(--muted);margin-top:16px;line-height:1.65}
 </style>
 </head>
 <body>
@@ -92,15 +88,21 @@ a{color:var(--accent)}
   (AUC 0.959) where three of four offline baselines fall to chance.</p></div>
 
   <h2>Why real time is hard</h2>
-  <p class="lede">Offline watermarks assume the full clip is available before embedding. On a live
-  stream it is not — a watermark computed from past speech must be applied to future frames.</p>
-  <figure>
-    <img src="assets/figures/time_shift.png" alt="Bit recovery rate against watermark time shift for four offline methods">
-    <figcaption><strong>Figure 1.</strong> Applying each watermark to audio shifted forward in time.
-    WavMark, AudioSeal and SilentCipher degrade sharply within a few milliseconds; only Timbre stays
-    above 89%. Most offline methods are sensitive to exactly the temporal mismatch that live
-    deployment introduces.</figcaption>
-  </figure>
+  <div class="split">
+    <div>
+      <p class="lede" style="margin-bottom:16px">Offline watermarks assume the full clip is available
+      before embedding. On a live stream it is not — a watermark computed from past speech must be
+      applied to future frames.</p>
+      <p style="font-size:17px;color:var(--muted);margin:0">We tested four open-source methods on 50
+      LibriSpeech clips: extract each watermark, shift it forward in time, add it back to the clean
+      audio. WavMark, AudioSeal and SilentCipher degrade sharply within a few milliseconds. Only
+      Timbre stays above 89% — and its weaker robustness to the phone channel rules it out anyway.</p>
+    </div>
+    <figure>
+      <img src="assets/figures/time_shift.png" alt="Bit recovery rate against watermark time shift for four offline methods">
+      <figcaption><strong>Figure 1.</strong> Bit recovery against watermark time shift.</figcaption>
+    </figure>
+  </div>
 </div></section>
 
 <section><div class="wrap">
