@@ -50,12 +50,7 @@ tr.hl td{background:var(--accent-soft);font-weight:600}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px}
 .card h3{margin:0 0 4px;font-size:19px}
 .card .meta{font-size:15px;color:var(--muted);margin:0 0 13px;font-variant-numeric:tabular-nums}
-.card audio{width:100%;height:40px;margin-bottom:13px}
-.card img{width:100%;height:auto;border-radius:7px;border:1px solid var(--line);background:#fff;display:block}
-.tabs{display:flex;gap:8px;margin:0 0 18px;flex-wrap:wrap}
-.tab{padding:9px 18px;border-radius:999px;border:1px solid var(--line);background:var(--card);
-  font-size:16px;cursor:pointer;color:var(--fg)}
-.tab[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.card audio{width:100%;height:42px;margin:4px 0 2px}
 .badge{display:inline-block;padding:2px 9px;border-radius:6px;background:var(--accent-soft);
   color:var(--accent);font-size:14px;font-weight:600;margin-left:7px;vertical-align:2px}
 pre{background:var(--code);border:1px solid var(--line);border-radius:9px;padding:16px;
@@ -121,50 +116,39 @@ a{color:var(--accent)}
 
 <section id="listen"><div class="wrap">
   <h2>Listen <span class="badge">5 methods</span></h2>
-  <p class="lede">The same LibriSpeech clip watermarked by each method. Switch between the
-  watermarked audio and the watermark on its own — the residual that was added to the speech.</p>
-
-  <div class="tabs" role="tablist">
-    <button class="tab" role="tab" aria-selected="true" data-view="wm">Watermarked audio</button>
-    <button class="tab" role="tab" aria-selected="false" data-view="res">Watermark only</button>
-  </div>
+  <p class="lede">The same LibriSpeech clip watermarked by each method. Every clip carries a
+  different watermark; none of them should be audible.</p>
 
   <div class="grid" id="cards">
     <div class="card">
       <h3>Clean reference</h3>
       <p class="meta">LibriSpeech dev-clean · 1272-128104-0000</p>
       <audio controls preload="none" src="assets/audio/clean.wav"></audio>
-      <img data-wm="assets/spec/clean.png" data-res="assets/spec/clean.png" src="assets/spec/clean.png" alt="Spectrogram of the clean clip">
     </div>
     <div class="card">
       <h3>RT-SW <span class="badge">ours</span></h3>
       <p class="meta">SNR 40.1 dB · 10-bit payload · streaming</p>
       <audio controls preload="none" src="assets/audio/rtsw.wav"></audio>
-      <img data-wm="assets/spec/rtsw.png" data-res="assets/spec/rtsw_residual.png" src="assets/spec/rtsw.png" alt="Spectrogram, RT-SW">
     </div>
     <div class="card">
       <h3>AudioSeal</h3>
       <p class="meta">SNR 25.6 dB · 16-bit payload · offline</p>
       <audio controls preload="none" src="assets/audio/audioseal.wav"></audio>
-      <img data-wm="assets/spec/audioseal.png" data-res="assets/spec/audioseal_residual.png" src="assets/spec/audioseal.png" alt="Spectrogram, AudioSeal">
     </div>
     <div class="card">
       <h3>WavMark</h3>
       <p class="meta">SNR 36.4 dB · 16-bit payload · offline</p>
       <audio controls preload="none" src="assets/audio/wavmark.wav"></audio>
-      <img data-wm="assets/spec/wavmark.png" data-res="assets/spec/wavmark_residual.png" src="assets/spec/wavmark.png" alt="Spectrogram, WavMark">
     </div>
     <div class="card">
       <h3>Timbre</h3>
       <p class="meta">SNR 27.1 dB · 10-bit payload · offline</p>
       <audio controls preload="none" src="assets/audio/timbre.wav"></audio>
-      <img data-wm="assets/spec/timbre.png" data-res="assets/spec/timbre_residual.png" src="assets/spec/timbre.png" alt="Spectrogram, Timbre">
     </div>
     <div class="card">
       <h3>SilentCipher</h3>
       <p class="meta">SNR 49.1 dB · 40-bit payload · offline</p>
       <audio controls preload="none" src="assets/audio/silentcipher.wav"></audio>
-      <img data-wm="assets/spec/silentcipher.png" data-res="assets/spec/silentcipher_residual.png" src="assets/spec/silentcipher.png" alt="Spectrogram, SilentCipher">
     </div>
   </div>
   <p class="note">All clips are 16 kHz mono. SilentCipher operates at 44.1 kHz and is resampled here
@@ -236,20 +220,5 @@ bash scripts/run_evaluation.sh              # reproduce the tables</code></pre>
   · Built on <a href="https://github.com/TimbreWatermarking/TimbreWatermarking">TimbreWatermarking</a> (NDSS 2024).</p>
 </div></footer>
 
-<script>
-(function(){
-  var tabs = document.querySelectorAll('.tab');
-  tabs.forEach(function(t){
-    t.addEventListener('click', function(){
-      tabs.forEach(function(o){ o.setAttribute('aria-selected', o === t ? 'true' : 'false'); });
-      var view = t.dataset.view;
-      document.querySelectorAll('#cards img').forEach(function(img){
-        var src = img.dataset[view];
-        if (src) img.src = src;
-      });
-    });
-  });
-})();
-</script>
 </body>
 </html>

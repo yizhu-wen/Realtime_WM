@@ -1,7 +1,7 @@
 """Watermark one LibriSpeech clip with every method, for the project page.
 
-Writes, per method, the watermarked wav and the watermark residual
-(watermarked - clean) that Fig. 3 of the paper plots.
+Writes one watermarked wav per method, all at 16 kHz so the page's players are
+directly comparable.
 
     DATA_ROOT=/data/yizwen python scripts/make_demo_audio.py --method RTSW
     DATA_ROOT=/data/yizwen python scripts/make_demo_audio.py --method AudioSeal
@@ -40,7 +40,6 @@ to16 = lambda v: v if m.sr == 16000 else ss.resample_poly(v, 16000, m.sr).astype
 if not os.path.exists(os.path.join(a.out, "clean.wav")):
     sf.write(os.path.join(a.out, "clean.wav"), to16(x), 16000, subtype="PCM_16")
 sf.write(os.path.join(a.out, f"{tag}.wav"), to16(y), 16000, subtype="PCM_16")
-np.save(os.path.join(a.out, f"{tag}_residual.npy"), to16(y - x))
 
 snr = 10*np.log10(np.mean(x.astype(np.float64)**2) / np.mean((y-x).astype(np.float64)**2))
 bits = m.decode(y, msg)
