@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RT-SW — Real-Time Speech Watermarking</title>
+<meta name="description" content="Real-Time Speech Watermarking for Live Voice Communication: Synthetic Speech Provenance and Post-Hoc Recording Attribution">
+<style>
+:root{
+  --bg:#fbfbfd; --fg:#16181d; --muted:#5b6270; --line:#e3e6ec;
+  --card:#fff; --accent:#1f5fd0; --accent-soft:#eaf0fc; --code:#f4f5f8;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0f1115; --fg:#e8eaef; --muted:#9aa3b2; --line:#252a33;
+  --card:#161a21; --accent:#7aa5f5; --accent-soft:#182236; --code:#1b2029;
+}}
+:root[data-theme="dark"]{
+  --bg:#0f1115; --fg:#e8eaef; --muted:#9aa3b2; --line:#252a33;
+  --card:#161a21; --accent:#7aa5f5; --accent-soft:#182236; --code:#1b2029;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);margin:0;
+  font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased}
+.wrap{max-width:1000px;margin:0 auto;padding:0 20px}
+header{padding:56px 0 34px;border-bottom:1px solid var(--line)}
+h1{font-size:30px;line-height:1.25;margin:0 0 6px;letter-spacing:-.02em}
+.sub{font-size:17px;color:var(--muted);margin:0 0 20px;font-weight:400}
+.authors{font-size:14.5px;margin:0 0 4px}
+.affil{font-size:13px;color:var(--muted);margin:0 0 20px}
+.links{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+.btn{display:inline-block;padding:8px 15px;border-radius:7px;border:1px solid var(--line);
+  background:var(--card);color:var(--fg);text-decoration:none;font-size:14px;font-weight:500}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{opacity:.9;color:#fff}
+section{padding:40px 0;border-bottom:1px solid var(--line)}
+h2{font-size:21px;margin:0 0 6px;letter-spacing:-.01em}
+h2+.lede{color:var(--muted);margin:0 0 22px;font-size:14.5px}
+figure{margin:0 0 8px}
+figure img{width:100%;height:auto;border-radius:9px;border:1px solid var(--line);background:#fff}
+figcaption{font-size:13px;color:var(--muted);margin-top:9px}
+.tldr{background:var(--accent-soft);border:1px solid var(--line);border-radius:10px;
+  padding:16px 18px;margin:0 0 26px}
+.tldr p{margin:0;font-size:14.5px}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left}
+th{font-weight:600;color:var(--muted);font-size:12.5px;text-transform:uppercase;letter-spacing:.04em}
+td.num{font-variant-numeric:tabular-nums}
+tr.hl td{background:var(--accent-soft);font-weight:600}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:15px}
+.card h3{margin:0 0 3px;font-size:15.5px}
+.card .meta{font-size:12.5px;color:var(--muted);margin:0 0 11px;font-variant-numeric:tabular-nums}
+.card audio{width:100%;height:36px;margin-bottom:11px}
+.card img{width:100%;height:auto;border-radius:6px;border:1px solid var(--line);background:#fff;display:block}
+.tabs{display:flex;gap:6px;margin:0 0 14px;flex-wrap:wrap}
+.tab{padding:6px 13px;border-radius:999px;border:1px solid var(--line);background:var(--card);
+  font-size:13px;cursor:pointer;color:var(--fg)}
+.tab[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.badge{display:inline-block;padding:1px 7px;border-radius:5px;background:var(--accent-soft);
+  color:var(--accent);font-size:11.5px;font-weight:600;margin-left:6px;vertical-align:1px}
+pre{background:var(--code);border:1px solid var(--line);border-radius:8px;padding:13px;
+  overflow-x:auto;font-size:13px;margin:0}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+footer{padding:30px 0 50px;color:var(--muted);font-size:13px}
+a{color:var(--accent)}
+.note{font-size:13px;color:var(--muted);margin-top:14px}
+</style>
+</head>
+<body>
+
+<header><div class="wrap">
+  <h1>Real-Time Speech Watermarking for Live Voice Communication</h1>
+  <p class="sub">Synthetic Speech Provenance and Post-Hoc Recording Attribution</p>
+  <p class="authors">Yizhu Wen<sup>1</sup>, Huaili Zeng<sup>2</sup>, Rui Duan<sup>3</sup>, Tianxing Li<sup>2</sup>, Nan Zhang<sup>4</sup>, Hanqing Guo<sup>1</sup></p>
+  <p class="affil"><sup>1</sup>Indiana University Bloomington, Computer Science · <sup>2</sup>Michigan State University, CSE · <sup>3</sup>University of Missouri–Kansas City, CS · <sup>4</sup>Indiana University Bloomington, The Media School</p>
+  <div class="links">
+    <a class="btn primary" href="assets/paper.pdf">Paper (PDF)</a>
+    <a class="btn" href="https://github.com/yizhu-wen/Realtime_WM">Code</a>
+    <a class="btn" href="#listen">Listen</a>
+  </div>
+</div></header>
+
+<section><div class="wrap">
+  <div class="tldr"><p><strong>RT-SW embeds a watermark into speech that has not been spoken yet.</strong>
+  It predicts the watermark for upcoming audio from preceding context, so it runs on a live stream
+  with 0.5&nbsp;s of lookahead. Every method it is compared against reads the whole utterance offline.
+  Under a simulated phone call, RT-SW recovers <strong>90.6%</strong> of watermark bits
+  (AUC 0.959) where three of four offline baselines fall to chance.</p></div>
+
+  <h2>Why real time is hard</h2>
+  <p class="lede">Offline watermarks assume the full clip is available before embedding. On a live
+  stream it is not — a watermark computed from past speech must be applied to future frames.</p>
+  <figure>
+    <img src="assets/figures/time_shift.png" alt="Bit recovery rate against watermark time shift for four offline methods">
+    <figcaption><strong>Figure 1.</strong> Applying each watermark to audio shifted forward in time.
+    WavMark, AudioSeal and SilentCipher degrade sharply within a few milliseconds; only Timbre stays
+    above 89%. Most offline methods are sensitive to exactly the temporal mismatch that live
+    deployment introduces.</figcaption>
+  </figure>
+</div></section>
+
+<section><div class="wrap">
+  <h2>How RT-SW works</h2>
+  <p class="lede">A predictive encoder generates the watermark for upcoming frames; a differentiable
+  telephony channel sits between encoder and decoder during training.</p>
+  <figure>
+    <img src="assets/figures/framework.png" alt="RT-SW pipeline: watermark encoder, differentiable telephony distortion layer, watermark decoder">
+    <figcaption><strong>Figure 2.</strong> The encoder embeds an encoded bitstring into the speech
+    spectrum, repeating the watermark feature across time and frequency so recovery survives cropping
+    and temporal shift. Training passes the watermarked audio through a differentiable layer —
+    room impulse response, additive noise, then a 300–3400&nbsp;Hz telephone band — so the decoder
+    learns a watermark that survives the channel rather than one that merely hides well.</figcaption>
+  </figure>
+</div></section>
+
+<section id="listen"><div class="wrap">
+  <h2>Listen <span class="badge">5 methods</span></h2>
+  <p class="lede">The same LibriSpeech clip watermarked by each method. Switch between the
+  watermarked audio and the watermark on its own — the residual that was added to the speech.</p>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" aria-selected="true" data-view="wm">Watermarked audio</button>
+    <button class="tab" role="tab" aria-selected="false" data-view="res">Watermark only</button>
+  </div>
+
+  <div class="grid" id="cards">
+    <div class="card">
+      <h3>Clean reference</h3>
+      <p class="meta">LibriSpeech dev-clean · 1272-128104-0000</p>
+      <audio controls preload="none" src="assets/audio/clean.wav"></audio>
+      <img data-wm="assets/spec/clean.png" data-res="assets/spec/clean.png" src="assets/spec/clean.png" alt="Spectrogram of the clean clip">
+    </div>
+    <div class="card">
+      <h3>RT-SW <span class="badge">ours</span></h3>
+      <p class="meta">SNR 40.1 dB · 10-bit payload · streaming</p>
+      <audio controls preload="none" src="assets/audio/rtsw.wav"></audio>
+      <img data-wm="assets/spec/rtsw.png" data-res="assets/spec/rtsw_residual.png" src="assets/spec/rtsw.png" alt="Spectrogram, RT-SW">
+    </div>
+    <div class="card">
+      <h3>AudioSeal</h3>
+      <p class="meta">SNR 25.6 dB · 16-bit payload · offline</p>
+      <audio controls preload="none" src="assets/audio/audioseal.wav"></audio>
+      <img data-wm="assets/spec/audioseal.png" data-res="assets/spec/audioseal_residual.png" src="assets/spec/audioseal.png" alt="Spectrogram, AudioSeal">
+    </div>
+    <div class="card">
+      <h3>WavMark</h3>
+      <p class="meta">SNR 36.4 dB · 16-bit payload · offline</p>
+      <audio controls preload="none" src="assets/audio/wavmark.wav"></audio>
+      <img data-wm="assets/spec/wavmark.png" data-res="assets/spec/wavmark_residual.png" src="assets/spec/wavmark.png" alt="Spectrogram, WavMark">
+    </div>
+    <div class="card">
+      <h3>Timbre</h3>
+      <p class="meta">SNR 27.1 dB · 10-bit payload · offline</p>
+      <audio controls preload="none" src="assets/audio/timbre.wav"></audio>
+      <img data-wm="assets/spec/timbre.png" data-res="assets/spec/timbre_residual.png" src="assets/spec/timbre.png" alt="Spectrogram, Timbre">
+    </div>
+    <div class="card">
+      <h3>SilentCipher</h3>
+      <p class="meta">SNR 49.1 dB · 40-bit payload · offline</p>
+      <audio controls preload="none" src="assets/audio/silentcipher.wav"></audio>
+      <img data-wm="assets/spec/silentcipher.png" data-res="assets/spec/silentcipher_residual.png" src="assets/spec/silentcipher.png" alt="Spectrogram, SilentCipher">
+    </div>
+  </div>
+  <p class="note">All clips are 16 kHz mono. SilentCipher operates at 44.1 kHz and is resampled here
+  so the comparison is like for like; its SNR is measured at its native rate. Every method recovered
+  its full payload from this clip except RT-SW, which recovered 9 of 10 bits.</p>
+</div></section>
+
+<section><div class="wrap">
+  <h2>Where the watermarks sit</h2>
+  <figure>
+    <img src="assets/figures/spectrograms.png" alt="Watermark spectrograms for five methods">
+    <figcaption><strong>Figure 3.</strong> The watermark alone, for each method. RT-SW concentrates
+    its energy inside the telephone band it was trained against, which is what survives the channel.</figcaption>
+  </figure>
+</div></section>
+
+<section><div class="wrap">
+  <h2>Results</h2>
+  <p class="lede">Bit accuracy and AUC, averaged over four corpora — LibriSpeech dev-clean, LJSpeech,
+  HiFi-GAN resynthesis and F5-TTS cross-speaker cloning. All baselines process audio offline.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>Distortion</th><th>RT-SW (ours)</th><th>AudioSeal</th><th>WavMark</th><th>Timbre</th><th>SilentCipher</th></tr></thead>
+    <tbody>
+      <tr><td>No distortion</td><td class="num">0.976 / 0.992</td><td class="num">1.000 / 1.000</td><td class="num">1.000 / 1.000</td><td class="num">1.000 / 1.000</td><td class="num">0.999 / 0.999</td></tr>
+      <tr><td>Median filter</td><td class="num">0.943 / 0.978</td><td class="num">1.000 / 1.000</td><td class="num">0.999 / 1.000</td><td class="num">1.000 / 0.999</td><td class="num">0.982 / 0.984</td></tr>
+      <tr><td>Low-pass 4k</td><td class="num">0.938 / 0.974</td><td class="num">1.000 / 1.000</td><td class="num">1.000 / 1.000</td><td class="num">1.000 / 1.000</td><td class="num">0.889 / 0.899</td></tr>
+      <tr><td>High-pass 500</td><td class="num">0.968 / 0.988</td><td class="num">1.000 / 1.000</td><td class="num">1.000 / 1.000</td><td class="num">1.000 / 1.000</td><td class="num">0.965 / 0.969</td></tr>
+      <tr><td>Compression</td><td class="num">0.969 / 0.990</td><td class="num">1.000 / 1.000</td><td class="num">1.000 / 1.000</td><td class="num">1.000 / 0.999</td><td class="num">0.998 / 0.998</td></tr>
+      <tr><td>Noise suppression</td><td class="num">0.929 / 0.964</td><td class="num">0.998 / 1.000</td><td class="num">0.980 / 0.982</td><td class="num">0.998 / 0.998</td><td class="num">0.877 / 0.900</td></tr>
+      <tr><td>MP3 64 kbps</td><td class="num">0.975 / 0.993</td><td class="num">1.000 / 1.000</td><td class="num">1.000 / 1.000</td><td class="num">1.000 / 0.999</td><td class="num">0.964 / 0.969</td></tr>
+      <tr><td>AAC 64 kbps</td><td class="num">0.981 / 0.994</td><td class="num">1.000 / 1.000</td><td class="num">1.000 / 1.000</td><td class="num">1.000 / 1.000</td><td class="num">0.868 / 0.883</td></tr>
+      <tr><td>Ogg Vorbis</td><td class="num">0.978 / 0.993</td><td class="num">1.000 / 1.000</td><td class="num">1.000 / 1.000</td><td class="num">1.000 / 0.999</td><td class="num">0.963 / 0.967</td></tr>
+      <tr><td>Sample suppression</td><td class="num">0.978 / 0.994</td><td class="num">1.000 / 1.000</td><td class="num">1.000 / 1.000</td><td class="num">1.000 / 0.999</td><td class="num">0.893 / 0.908</td></tr>
+      <tr class="hl"><td>Telephony distortion</td><td class="num">0.906 / 0.959</td><td class="num">0.535 / 0.582</td><td class="num">0.500 / 0.500</td><td class="num">0.780 / 0.908</td><td class="num">0.499 / 0.498</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note">Each cell is bit accuracy / AUC. Under the telephony channel WavMark and
+  SilentCipher fail to synchronise at all, so their scores sit at chance. Timbre reaches AUC 0.908
+  but only 0.299 TPR at a 1% false-positive rate, against RT-SW's 0.734.</p>
+
+  <h2 style="margin-top:34px">Imperceptibility</h2>
+  <div class="scroll"><table>
+    <thead><tr><th>Method</th><th>Payload</th><th>SNR (dB)</th><th>PESQ</th><th>Mode</th></tr></thead>
+    <tbody>
+      <tr class="hl"><td>RT-SW (ours)</td><td class="num">10</td><td class="num">40.22</td><td class="num">4.163</td><td>streaming</td></tr>
+      <tr><td>AudioSeal</td><td class="num">16</td><td class="num">27.26</td><td class="num">4.426</td><td>offline</td></tr>
+      <tr><td>WavMark</td><td class="num">16</td><td class="num">36.61</td><td class="num">4.154</td><td>offline</td></tr>
+      <tr><td>Timbre</td><td class="num">10</td><td class="num">27.47</td><td class="num">3.697</td><td>offline</td></tr>
+      <tr><td>SilentCipher</td><td class="num">40</td><td class="num">49.01</td><td class="num">4.590</td><td>offline</td></tr>
+    </tbody>
+  </table></div>
+</div></section>
+
+<section><div class="wrap">
+  <h2>Try it</h2>
+  <pre><code>git clone https://github.com/yizhu-wen/Realtime_WM
+cd Realtime_WM
+pip install -r watermarking_model/requirements.txt
+
+bash scripts/download_data.sh ./data        # LibriSpeech + LJSpeech
+bash scripts/run_evaluation.sh              # reproduce the tables</code></pre>
+  <p class="note">The released model is <code>watermarking_model/checkpoints/rtsw_ep20.pth.tar</code>.
+  Per-utterance scores ship with the repository, so every table can be rebuilt without re-running
+  the evaluation.</p>
+</div></section>
+
+<footer><div class="wrap">
+  <p>Code: <a href="https://github.com/yizhu-wen/Realtime_WM">github.com/yizhu-wen/Realtime_WM</a>
+  · Built on <a href="https://github.com/TimbreWatermarking/TimbreWatermarking">TimbreWatermarking</a> (NDSS 2024).</p>
+</div></footer>
+
+<script>
+(function(){
+  var tabs = document.querySelectorAll('.tab');
+  tabs.forEach(function(t){
+    t.addEventListener('click', function(){
+      tabs.forEach(function(o){ o.setAttribute('aria-selected', o === t ? 'true' : 'false'); });
+      var view = t.dataset.view;
+      document.querySelectorAll('#cards img').forEach(function(img){
+        var src = img.dataset[view];
+        if (src) img.src = src;
+      });
+    });
+  });
+})();
+</script>
+</body>
+</html>

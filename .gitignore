@@ -348,3 +348,6 @@ watermarking_model/results/detect_backup/
 
 # downloaded corpora
 data/
+
+# demo residuals are intermediates; the spectrograms are what ships
+docs/assets/audio/*_residual.npy
