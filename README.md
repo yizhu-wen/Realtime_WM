@@ -4,8 +4,6 @@ A streaming neural speech watermark. The encoder embeds with **0.5 s of
 lookahead** and is causal by construction, so it can run on live audio; the
 baselines it is compared against all read the whole utterance offline.
 
-Fork of [TimbreWatermarking](https://github.com/TimbreWatermarking/TimbreWatermarking) (NDSS 2024).
-
 ## Result
 
 RT-SW matches offline watermarks on standard distortions and is the only method
@@ -126,6 +124,8 @@ watermarking_model/
   checkpoints/      the released model
   results/evals/    tables
 ```
+
+Base model architecture: Fork of [TimbreWatermarking](https://github.com/TimbreWatermarking/TimbreWatermarking) (NDSS 2024).
 
 ## License
 
