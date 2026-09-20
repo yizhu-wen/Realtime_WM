@@ -1,6 +1,6 @@
 # Real-Time Speech Watermarking for Live Voice Communication: Synthetic Speech Provenance and Post-Hoc Recording Attribution
 
-A streaming neural speech watermark. The encoder embeds with **0.5 s of
+A Real-Time Speech Watermarking (RT-SW). The encoder embeds with **0.5 s of
 lookahead** and is causal by construction, so it can run on live audio; the
 baselines it is compared against all read the whole utterance offline.
 
